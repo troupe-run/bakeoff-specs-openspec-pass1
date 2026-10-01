@@ -1,0 +1,76 @@
+schema: spec-driven
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
+context: |
+  Project principles for troupe's configuration subsystem.
+  
+  What this is:
+  - troupe runs teams of AI agents. This repository is its configuration subsystem: a command-line tool over YAML
+    configuration files that people edit by hand and review as diffs.
+  - It will be built in stages, and the requirements will change along the way. Build for the current stage, in a
+    way that is easy to change.
+  
+  Fixed technical constraints:
+  - Python 3.12 or later, managed with uv. The CLI must run as `uv run troupe config …` from the repository root.
+  - Use the `eventsourcing` library for the event store and projection.
+  - Configuration lives in `<theatre>/.troupe/troupe.yml` (or `.yaml`).
+  - macOS and Linux. Windows is out of scope. There are no performance targets: configurations are small.
+  
+  The people who use it:
+  - They are developers. They care more about their files staying exactly as they wrote them than about speed. Never
+    reformat, reorder or rewrite anything the user did not ask to change.
+  - Error messages name the path or file involved.
+  
+  Quality bar:
+  - Code is fully typed and passes `mypy --strict`; ruff is clean.
+  - Every behaviour has a test that fails when the behaviour breaks. A test's name states what it proves, and its
+    body checks exactly that. A test that passes whatever the code does is worse than no test.
+  - Test against the real shapes the code will meet (real files, real command output), not hand-written stand-ins
+    that might differ.
+  - Done means verified: run the tests and show the result before saying something works.
+  
+  Design:
+  - Keep each decision in one named place, so that changing it later is a one-place change rather than a hunt.
+  - When unsure, take the conservative choice that cannot lose or corrupt a user's data, and say what you chose.
+  - Deliver the whole of what is asked. Do not quietly narrow the scope; if something cannot be done, say so.
+  
+  Working with the product owner:
+  - The product owner answers questions about what to build. Do not invent requirements.
+  - Before asking, look for the answer in what you can reach: the repository, the contract and the documents you were
+    given. Then ask with what you found, the options and your recommendation, not just the problem.
+  - Where the contract leaves a choice open, make it, and say what you chose and why.
+  
+  Keeping things traceable:
+  - Keep the specification, the code and the tests in agreement. When behaviour changes, update all three in the
+    same change.
+  - Record significant decisions with their reasons where the next person will find them.
+  - Commit in small, meaningful steps, with messages that say why.
