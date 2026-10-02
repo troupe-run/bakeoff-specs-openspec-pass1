@@ -212,3 +212,20 @@ def test_kept_block_scalar_keeps_its_trailing_blank_lines_when_a_key_follows(
     set_file: Callable[..., str],
 ) -> None:
     assert set_file("p: |+\n  a\n\n", "q", "1") == "p: |+\n  a\n\nq: 1\n"
+
+
+@pytest.mark.parametrize(
+    ("before", "path", "value", "after"),
+    [
+        pytest.param("a:\nb: 1\n", "a", "x", "a: x\nb: 1\n", id="scalar"),
+        pytest.param("a:\n", "a", "x", "a: x\n", id="at-end-of-file"),
+        pytest.param("a:   # c\nb: 1\n", "a", "x", "a: x # c\nb: 1\n", id="with-comment"),
+        pytest.param("a:\nb: 1\n", "a", "{c: 1}", "a:\n  c: 1\nb: 1\n", id="mapping"),
+        pytest.param("a:\nb: 1\n", "a", '"x\\ny\\n"', "a: |\n  x\n  y\nb: 1\n", id="literal"),
+        pytest.param("l:\n  -\n  - b\n", "l.0", "x", "l:\n  - x\n  - b\n", id="empty-list-item"),
+    ],
+)
+def test_filling_an_empty_value(
+    set_file: Callable[..., str], before: str, path: str, value: str, after: str
+) -> None:
+    assert set_file(before, path, value) == after

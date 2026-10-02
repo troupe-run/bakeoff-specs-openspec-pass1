@@ -44,8 +44,8 @@
 
 ## 8. set: block scalars
 
-- [ ] 8.1 Implement literal-block emission and block-scalar replacement (header parsing, kept indentation, `required_chomping`, kept chomping when it can represent the value, an indentation indicator for a leading space, a double-quoted fallback). Verify with byte-exact tests for each "Multi-line strings and block scalars" scenario, plus a CRLF block scalar
-- [ ] 8.2 Implement `edit/folded.py` (paragraph alignment, kept bytes for unchanged paragraphs, greedy re-wrap at the paired or global width, long words, separator blank lines, more-indented → exit 3). Verify with byte-exact tests for each "Folded block scalars" scenario, plus a paragraph insertion and a paragraph deletion
+- [x] 8.1 Implement literal-block emission and block-scalar replacement (header parsing, kept indentation, `required_chomping`, kept chomping when it can represent the value, an indentation indicator for a leading space, a double-quoted fallback). Verify with byte-exact tests for each "Multi-line strings and block scalars" scenario, plus a CRLF block scalar
+- [x] 8.2 Implement `edit/folded.py` (paragraph alignment, kept bytes for unchanged paragraphs, greedy re-wrap at the paired or global width, long words, separator blank lines, more-indented → exit 3). Verify with byte-exact tests for each "Folded block scalars" scenario, plus a paragraph insertion and a paragraph deletion
 
 ## 9. Integration and documentation
 

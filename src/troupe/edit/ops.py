@@ -74,7 +74,20 @@ def replace(slot: Slot, value: Data, where: str) -> FileEdits:
         return src, _replace_block_scalar(slot, node, node.block, value, layout, where)
     if isinstance(node, MappingNode | SequenceNode) and not node.flow_style:
         return src, _replace_block_collection(slot, node, value, layout)
+    if isinstance(node, ScalarNode) and node.start == node.end:
+        return src, _replace_empty(slot, value, layout)
     return src, _replace_inline(slot, value, layout)
+
+
+def _replace_empty(slot: Slot, value: Data, layout: Layout) -> list[Edit]:
+    """Fill an empty (implicit null) value such as `key:`: the text goes right after the indicator."""
+    src = slot.node.file
+    pos = slot.indicator_end
+    r = _render_for(slot, value, layout, None)
+    edits = [inline_edit(src, pos, pos, " " + r.inline)] if r.inline else []
+    if r.lines:
+        edits.append(insert_lines(src, src.next_line(pos), r.lines))
+    return edits
 
 
 def _render_for(slot: Slot, value: Data, layout: Layout, preferred: str | None) -> Rendered:
