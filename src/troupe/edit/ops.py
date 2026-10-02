@@ -245,14 +245,21 @@ def delete(parent: MappingNode | SequenceNode, index: int, where: str) -> FileEd
         if len(spans) > 1:
             return src, [Edit(start, spans[1][0], "")]
         return src, [inline_edit(src, start, end, "")]
+    starts = (
+        [e.key_node.start for e in parent.entries]
+        if isinstance(parent, MappingNode)
+        else [i.dash if i.dash is not None else i.value.start for i in parent.items]
+    )
     if isinstance(parent, MappingNode):
-        entry = parent.entries[index]
-        first, end = entry.key_node.start, owned_end(entry.value)
+        end = owned_end(parent.entries[index].value)
     else:
-        item = parent.items[index]
-        assert item.dash is not None
-        first, end = item.dash, owned_end(item.value)
+        end = owned_end(parent.items[index].value)
+    first = starts[index]
     line_start = src.line_start(first)
-    if src.text[line_start:first].strip(" ") != "":
-        raise WriteRefused(f"{where}: cannot delete an entry that shares its line with another")
-    return src, [Edit(line_start, src.next_line(end), "")]
+    if src.text[line_start:first].strip(" ") == "":
+        return src, [Edit(line_start, src.next_line(end), "")]
+    if index == 0 and len(starts) > 1:
+        # The first entry of a compact `- key: v` shares the dash's line: pull the next entry up into its place,
+        # which sits at the same column.
+        return src, [Edit(first, starts[1], "")]
+    raise WriteRefused(f"{where}: cannot delete an entry that shares its line with another")

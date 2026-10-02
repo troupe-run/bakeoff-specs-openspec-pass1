@@ -69,3 +69,31 @@ def make(theatre: Theatre) -> Callable[[str], Theatre]:
         return theatre
 
     return _make
+
+
+@pytest.fixture
+def set_file(make: Callable[[str], Theatre]) -> Callable[..., str]:
+    """Run `set` on a theatre whose troupe.yml is `before`; assert success and return the new file text."""
+
+    def _set(before: str, path: str, value: str) -> str:
+        t = make(before)
+        r = t.run("set", path, value)
+        assert (r.code, r.out, r.err) == (0, "", ""), r.err
+        return t.read("troupe.yml")
+
+    return _set
+
+
+@pytest.fixture
+def refused(make: Callable[[str], Theatre]) -> Callable[..., Result]:
+    """Run `set` on a theatre whose troupe.yml is `before`; assert the file is unchanged."""
+
+    def _refused(before: str, path: str, value: str) -> Result:
+        t = make(before)
+        snapshot = t.snapshot()
+        r = t.run("set", path, value)
+        assert r.code != 0 and r.out == ""
+        assert t.snapshot() == snapshot
+        return r
+
+    return _refused

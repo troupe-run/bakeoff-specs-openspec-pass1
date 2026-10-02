@@ -1,6 +1,6 @@
 """Writing scalars in flow styles (plain, single-quoted, double-quoted) and choosing among them."""
 
-from troupe.schema import Scalar, key_text, plain_text, resolve_plain
+from troupe.schema import Scalar, plain_text, resolve_plain
 
 QUOTE_STYLES = (None, "'", '"')
 _INDICATORS = "!&*|>'\"%@`#,[]{}"
@@ -43,7 +43,7 @@ def is_printable(ch: str) -> bool:
     )
 
 
-def can_plain(text: str, *, flow: bool, as_key: bool = False) -> bool:
+def can_plain(text: str, *, flow: bool) -> bool:
     if text == "" or text != text.strip(" \t"):
         return False
     if any(ch in "\t\n\r" or not is_printable(ch) for ch in text):
@@ -59,8 +59,6 @@ def can_plain(text: str, *, flow: bool, as_key: bool = False) -> bool:
     if text.startswith(("---", "...")):
         return False
     resolved = resolve_plain(text)
-    if as_key:
-        return key_text(resolved) == text
     return resolved == text and isinstance(resolved, str)
 
 
@@ -84,10 +82,10 @@ def double(text: str) -> str:
     return '"' + "".join(out) + '"'
 
 
-def _render(text: str, preferred: str | None, *, flow: bool, as_key: bool) -> str:
+def _render(text: str, preferred: str | None, *, flow: bool) -> str:
     order = [preferred] if preferred in QUOTE_STYLES else []
     for style in [*order, None, "'", '"']:
-        if style is None and can_plain(text, flow=flow, as_key=as_key):
+        if style is None and can_plain(text, flow=flow):
             return text
         if style == "'" and can_single(text):
             return single(text)
@@ -100,8 +98,9 @@ def render_scalar(value: Scalar, preferred: str | None, *, flow: bool) -> str:
     """A scalar in the preferred quoting style if it can hold the value, else plain, single, double."""
     if not isinstance(value, str):
         return plain_text(value)
-    return _render(value, preferred, flow=flow, as_key=False)
+    return _render(value, preferred, flow=flow)
 
 
 def render_key(key: str, preferred: str | None, *, flow: bool) -> str:
-    return _render(key, preferred, flow=flow, as_key=True)
+    """A new mapping key; like a string value, it is quoted when plain would read back as another type."""
+    return _render(key, preferred, flow=flow)
