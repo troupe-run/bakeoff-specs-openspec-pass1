@@ -2,8 +2,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from conftest import Theatre
 
+from conftest import Theatre
 from troupe.errors import LoadError
 from troupe.loader import load
 from troupe.tree import to_data

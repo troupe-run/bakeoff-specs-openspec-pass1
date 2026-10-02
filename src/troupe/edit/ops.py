@@ -259,7 +259,7 @@ def delete(parent: MappingNode | SequenceNode, index: int, where: str) -> FileEd
     if src.text[line_start:first].strip(" ") == "":
         return src, [Edit(line_start, src.next_line(end), "")]
     if index == 0 and len(starts) > 1:
-        # The first entry of a compact `- key: v` shares the dash's line: pull the next entry up into its place,
-        # which sits at the same column.
+        # The first entry of a compact `- key: v` shares the dash's line: pull the next entry up into
+        # its place, which sits at the same column.
         return src, [Edit(first, starts[1], "")]
     raise WriteRefused(f"{where}: cannot delete an entry that shares its line with another")
