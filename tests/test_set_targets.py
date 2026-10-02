@@ -162,13 +162,13 @@ def test_unloadable_configuration_exits_4_on_set(make: Callable[[str], Theatre])
 def test_edit_that_does_not_read_back_as_intended_is_refused(
     make: Callable[[str], Theatre], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from troupe.edit import apply, ops
+    from troupe.edit import ops
     from troupe.edit.text import Edit
 
     def wrong_edit(slot: ops.Slot, value: object, where: str) -> ops.FileEdits:
         return slot.node.file, [Edit(slot.node.start, slot.node.end, "not-what-was-asked")]
 
-    monkeypatch.setattr(apply.prim, "replace", wrong_edit)
+    monkeypatch.setattr(ops, "replace", wrong_edit)
     t = make("a: x\n")
     snapshot = t.snapshot()
     r = t.run("set", "a", "y")
