@@ -14,19 +14,19 @@
 
 ## 3. Loading and includes
 
-- [ ] 3.1 Implement `source.py` (read with `newline=''`, newline-style detection, offset ↔ line/column helpers). Verify with tests on LF, CRLF and non-ASCII text that ruamel marks index the right characters
-- [ ] 3.2 Implement `tree.py` and `loader.py`: config-file discovery (neither or both → exit 4), compose → tree with spans, styles, flow context and owning file; resolution via `schema.py`; an empty file → empty mapping; anchors and unknown tags → exit 4. Verify with tests for each config-loading scenario on locating and parsing
-- [ ] 3.3 Add include resolution (YAML embedding, text includes with exact bytes, relative paths, recursion, missing target and cycle → exit 4, the same file twice allowed). Verify with tests for every config-loading "Includes" scenario using real nested directories
-- [ ] 3.4 Implement `leaves.py` (ordered leaf flattening of trees and plain values). Verify with tests for nested lists, text includes and empty collections (no leaves)
+- [x] 3.1 Implement `source.py` (read with `newline=''`, newline-style detection, offset ↔ line/column helpers). Verify with tests on LF, CRLF and non-ASCII text that ruamel marks index the right characters
+- [x] 3.2 Implement `tree.py` and `loader.py`: config-file discovery (neither or both → exit 4), compose → tree with spans, styles, flow context and owning file; resolution via `schema.py`; an empty file → empty mapping; anchors and unknown tags → exit 4. Verify with tests for each config-loading scenario on locating and parsing
+- [x] 3.3 Add include resolution (YAML embedding, text includes with exact bytes, relative paths, recursion, missing target and cycle → exit 4, the same file twice allowed). Verify with tests for every config-loading "Includes" scenario using real nested directories
+- [x] 3.4 Implement `leaves.py` (ordered leaf flattening of trees and plain values). Verify with tests for nested lists, text includes and empty collections (no leaves)
 
 ## 4. Event store and history
 
-- [ ] 4.1 Implement `store.py` (Application with SQLite at `.troupe/events.sqlite` through the constructor `env`, a `TheatreConfig` aggregate with a fixed id, `Imported`/`LeafSet`/`LeafRemoved` events, atomic save, a list of events with seq). Verify with tests that events persist across separate Application instances, and that the process `os.environ` is unchanged
-- [ ] 4.2 Wire the command flow (D11): parse → load → import-once → command, with no state created on exit 2 or 4. Implement `history [PATH]` (JSON Lines, prefix filter, non-finite floats as strings). Verify with tests for every config-history "Import on first command" and "Listing history" scenario and the config-cli "State confined" scenarios (snapshot the directory tree before and after)
+- [x] 4.1 Implement `store.py` (Application with SQLite at `.troupe/events.sqlite` through the constructor `env`, a `TheatreConfig` aggregate with a fixed id, `Imported`/`LeafSet`/`LeafRemoved` events, atomic save, a list of events with seq). Verify with tests that events persist across separate Application instances, and that the process `os.environ` is unchanged
+- [x] 4.2 Wire the command flow (D11): parse → load → import-once → command, with no state created on exit 2 or 4. Implement `history [PATH]` (JSON Lines, prefix filter, non-finite floats as strings). Verify with tests for every config-history "Import on first command" and "Listing history" scenario and the config-cli "State confined" scenarios (snapshot the directory tree before and after)
 
 ## 5. show
 
-- [ ] 5.1 Implement `show PATH` (scalar printing, text include as string, exit 5 for mappings, lists, missing keys, out-of-range indexes and descent into a scalar, each with the path in stderr). Verify with tests for every config-show scenario, including a hand edit after import
+- [x] 5.1 Implement `show PATH` (scalar printing, text include as string, exit 5 for mappings, lists, missing keys, out-of-range indexes and descent into a scalar, each with the path in stderr). Verify with tests for every config-show scenario, including a hand edit after import
 
 ## 6. set: planning and simple scalars
 

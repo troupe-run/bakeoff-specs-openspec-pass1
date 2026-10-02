@@ -1,2 +1,1 @@
-def hello() -> str:
-    return "Hello from troupe!"
+"""troupe: configuration subsystem for AI agent theatres."""
