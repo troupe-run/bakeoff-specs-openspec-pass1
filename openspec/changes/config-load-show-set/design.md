@@ -164,3 +164,8 @@ None, since there is no existing state.
 7. `history PATH` with no matches prints nothing and exits 0. Non-finite floats are shown in JSON as YAML-style
    strings.
 8. Explicit tags other than core ones, and anchors and aliases, fail to load with exit 4 for now.
+9. *(Added during implementation.)* New keys use the same plain-safety rule as string values. A key that would read
+   back as a non-string (such as `true` or `1.0`) is quoted, so the YAML key stays a string for every reader.
+10. *(Added during implementation.)* Deleting the first entry of a compact `- key: v` item (one that shares the
+    dash's line) pulls the next entry up into its place at the same column. It is not refused. An empty value
+    (`key:` with nothing after it) is filled right after the `:`.

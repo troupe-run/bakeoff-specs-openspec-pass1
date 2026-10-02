@@ -49,6 +49,6 @@
 
 ## 9. Integration and documentation
 
-- [ ] 9.1 Add a subprocess smoke suite that runs `uv run troupe config show|set|history` from the repository root against a realistic multi-file theatre (includes, comments, CRLF text include). Verify exit codes, stdout and file bytes
-- [ ] 9.2 Write `README.md` (installation, the three commands, exit codes, the open-question decisions from design.md) and verify each documented example command runs as written
-- [ ] 9.3 Run `uv run pytest`, `uv run mypy --strict src tests` and `uv run ruff check`. Verify all three are clean and record the output in the final summary
+- [x] 9.1 Add a subprocess smoke suite that runs `uv run troupe config show|set|history` from the repository root against a realistic multi-file theatre (includes, comments, CRLF text include). Verify exit codes, stdout and file bytes
+- [x] 9.2 Write `README.md` (installation, the three commands, exit codes, the open-question decisions from design.md) and verify each documented example command runs as written
+- [x] 9.3 Run `uv run pytest`, `uv run mypy --strict src tests` and `uv run ruff check`. Verify all three are clean and record the output in the final summary
