@@ -169,3 +169,11 @@ None, since there is no existing state.
 10. *(Added during implementation.)* Deleting the first entry of a compact `- key: v` item (one that shares the
     dash's line) pulls the next entry up into its place at the same column. It is not refused. An empty value
     (`key:` with nothing after it) is filled right after the `:`.
+
+## Archive decision
+
+When archiving, the delta specs were **synced into `openspec/specs/`** before the change was moved to the archive,
+rather than archived without syncing. The brief did not cover this. Syncing is the choice that cannot lose anything:
+the main specs stay the lasting statement of the behaviour the code and tests implement. Without them,
+`openspec/specs/` would be empty and later changes would have no baseline to modify. The sync only adds spec files
+and does not touch code or user data.
