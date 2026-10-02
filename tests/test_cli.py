@@ -15,6 +15,20 @@ def test_theatre_defaults_to_the_current_directory(
     assert (r.code, r.out) == (0, "x\n")
 
 
+def test_theatre_defaults_to_troupe_theatre_but_the_option_wins(
+    tmp_path: Path, run: Callable[..., Result], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env, opt = Theatre(tmp_path / "env", run), Theatre(tmp_path / "opt", run)
+    env.write("troupe.yml", "model: env\n")
+    opt.write("troupe.yml", "model: opt\n")
+    monkeypatch.setenv("TROUPE_THEATRE", str(env.root))
+    assert run("show", "model").out == "env\n"
+    assert run("--theatre", str(opt.root), "show", "model").out == "opt\n"
+    monkeypatch.setenv("TROUPE_THEATRE", "")
+    monkeypatch.chdir(opt.root)
+    assert run("show", "model").out == "opt\n"
+
+
 def test_theatre_option_may_come_before_the_subcommand(
     make: Callable[[str], Theatre], run: Callable[..., Result]
 ) -> None:

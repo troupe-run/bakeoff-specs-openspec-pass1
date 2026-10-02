@@ -1,6 +1,7 @@
 """Command-line entry point: `troupe config <show|set|history> [--theatre DIR] …`."""
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -19,7 +20,11 @@ class _Parser(argparse.ArgumentParser):
 
 def _parser() -> argparse.ArgumentParser:
     theatre = _Parser(add_help=False)
-    theatre.add_argument("--theatre", default=argparse.SUPPRESS, help="theatre directory (default: current)")
+    theatre.add_argument(
+        "--theatre",
+        default=argparse.SUPPRESS,
+        help="theatre directory (default: $TROUPE_THEATRE, else current)",
+    )
 
     parser = _Parser(prog="troupe", parents=[theatre])
     groups = parser.add_subparsers(dest="group", required=True, parser_class=_Parser)
@@ -39,7 +44,7 @@ def _parser() -> argparse.ArgumentParser:
 def run(argv: Sequence[str]) -> str:
     """Run a command and return what it prints; raises TroupeError on failure."""
     args = _parser().parse_args(argv)
-    theatre = Path(getattr(args, "theatre", "."))
+    theatre = Path(getattr(args, "theatre", os.environ.get("TROUPE_THEATRE") or "."))
     if args.command == "show":
         return commands.show(theatre, parse_path(args.path))
     if args.command == "set":
