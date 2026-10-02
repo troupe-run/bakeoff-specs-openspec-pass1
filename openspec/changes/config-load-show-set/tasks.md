@@ -2,15 +2,15 @@
 
 ## 1. Project scaffolding
 
-- [ ] 1.1 Create `pyproject.toml` (Python >=3.12, `src/troupe` layout, `troupe = "troupe.cli:main"` script; deps `eventsourcing`, `ruamel.yaml`; dev deps `pytest`, `mypy`, `ruff`; mypy `strict = true`; ruff config). Run `uv sync` and verify `uv run troupe --help` exits 0
-- [ ] 1.2 Add `src/troupe/errors.py` with the `TroupeError` hierarchy and exit codes (D1), plus a `cli.py` skeleton with `show`/`set`/`history` subcommands and `--theatre`. Verify `uv run troupe config bogus` exits 2 with empty stdout, and `uv run mypy src tests` and `uv run ruff check` are clean
-- [ ] 1.3 Add `.gitignore` (`.venv`, caches), commit `uv.lock`, and verify `git status` shows no stray files
+- [x] 1.1 Create `pyproject.toml` (Python >=3.12, `src/troupe` layout, `troupe = "troupe.cli:main"` script; deps `eventsourcing`, `ruamel.yaml`; dev deps `pytest`, `mypy`, `ruff`; mypy `strict = true`; ruff config). Run `uv sync` and verify `uv run troupe --help` exits 0
+- [x] 1.2 Add `src/troupe/errors.py` with the `TroupeError` hierarchy and exit codes (D1), plus a `cli.py` skeleton with `show`/`set`/`history` subcommands and `--theatre`. Verify `uv run troupe config bogus` exits 2 with empty stdout, and `uv run mypy src tests` and `uv run ruff check` are clean
+- [x] 1.3 Add `.gitignore` (`.venv`, caches), commit `uv.lock`, and verify `git status` shows no stray files
 
 ## 2. Core schema, paths and values
 
-- [ ] 2.1 Implement `schema.py` (core-schema resolution of plain scalars and `format_scalar`). Verify with tests covering every spelling in the config-cli "Command-line VALUE parsing" and "Printing scalars" requirements, including `2001-01-01`, `1_000`, `yes` → strings and `.inf` → `inf`
-- [ ] 2.2 Implement `paths.py` (parse, format, empty-segment error). Verify with tests for `tools.1`, `a..b` → UsageError, and `a.` → UsageError
-- [ ] 2.3 Implement `values.py` (one flow node: scalars, quoted escapes, `{}`/`[]`, multi-line strings; malformed or multi-node → UsageError). Verify with tests for every config-cli VALUE scenario
+- [x] 2.1 Implement `schema.py` (core-schema resolution of plain scalars and `format_scalar`). Verify with tests covering every spelling in the config-cli "Command-line VALUE parsing" and "Printing scalars" requirements, including `2001-01-01`, `1_000`, `yes` → strings and `.inf` → `inf`
+- [x] 2.2 Implement `paths.py` (parse, format, empty-segment error). Verify with tests for `tools.1`, `a..b` → UsageError, and `a.` → UsageError
+- [x] 2.3 Implement `values.py` (one flow node: scalars, quoted escapes, `{}`/`[]`, multi-line strings; malformed or multi-node → UsageError). Verify with tests for every config-cli VALUE scenario
 
 ## 3. Loading and includes
 
