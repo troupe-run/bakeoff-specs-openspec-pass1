@@ -2,19 +2,19 @@
 
 ## 1. Reconcile
 
-- [ ] 1.1 Move `_changes` from `src/troupe/edit/apply.py` to `leaves.diff_leaves(old, new)` (leaf dicts in, `list[Change]` out) and make `compute_set` use it; verify the existing `tests/test_history.py` and `tests/test_set_*.py` still pass unchanged
-- [ ] 1.2 Add `src/troupe/sync.py` with `reconcile(config, store)` (D1): diff `store.projection()` against the loaded leaves and record the changes in one save; verify with unit tests in `tests/test_reconcile.py` that it records nothing when the files match and that removes come in recorded order, then sets in document order
-- [ ] 1.3 Add a test that projection values round-trip through `events.sqlite` with their exact types (`1`, `1.0`, `true`, `"1"`, null, `.inf`, `.nan`, multi-line text), so a reconcile right after import records nothing; verify it passes
-- [ ] 1.4 Add CLI-level tests in `tests/test_reconcile.py` for every scenario of the config-sync requirement "Reconcile": hand edit to set event, removed and added leaves, scalar replaced by mapping, type change, formatting/comment-only edit emits nothing, edit inside an included text file; verify they fail before 2.x wires reconcile into commands (expected) and pass after
+- [x] 1.1 Move `_changes` from `src/troupe/edit/apply.py` to `leaves.diff_leaves(old, new)` (leaf dicts in, `list[Change]` out) and make `compute_set` use it; verify the existing `tests/test_history.py` and `tests/test_set_*.py` still pass unchanged
+- [x] 1.2 Add `src/troupe/sync.py` with `reconcile(config, store)` (D1): diff `store.projection()` against the loaded leaves and record the changes in one save; verify with unit tests in `tests/test_reconcile.py` that it records nothing when the files match and that removes come in recorded order, then sets in document order
+- [x] 1.3 Add a test that projection values round-trip through `events.sqlite` with their exact types (`1`, `1.0`, `true`, `"1"`, null, `.inf`, `.nan`, multi-line text), so a reconcile right after import records nothing; verify it passes
+- [x] 1.4 Add CLI-level tests in `tests/test_reconcile.py` for every scenario of the config-sync requirement "Reconcile": hand edit to set event, removed and added leaves, scalar replaced by mapping, type change, formatting/comment-only edit emits nothing, edit inside an included text file; verify they fail before 2.x wires reconcile into commands (expected) and pass after
 
 ## 2. Sessions, lock and reconcile-first commands
 
-- [ ] 2.1 Replace `commands.open_theatre` with the `theatre_session(theatre, *, reconcile)` context manager (D2): `find_config` → `flock` on the `.troupe/` directory → load → import → reconcile; keep the set of reconciling commands in one named constant; verify `uv run pytest` passes
-- [ ] 2.2 Make `set` hold the session (and so the lock) through compute, file writes and event recording; verify with a test that, while the test process holds `flock` on `.troupe/`, a `set` subprocess blocks and completes only after release
-- [ ] 2.3 Wire `show` and `set` to reconcile first and `history` not to; verify the config-sync "Commands reconcile first" scenarios with tests (set after hand edit gives two events in order, reconcile persists when `show nope` exits 5, history does not reconcile but a later `show` does, exit 2 / exit 4 record nothing)
-- [ ] 2.4 Replace `test_hand_edits_are_not_reconciled` with `test_hand_edits_are_not_imported` and update `test_set_records_old_value_from_the_files` to expect the reconcile event followed by the set event (config-history delta); verify both pass
-- [ ] 2.5 Check that a theatre with no config file still creates nothing (lock taken only after `find_config`) and that invalid YAML creates no `events.sqlite`; verify the existing `test_cli.py` / `test_loading.py` state tests pass and add one for invalid YAML if missing
-- [ ] 2.6 Update README ("State" section and decisions list) to say hand edits are now recorded by reconciling, `history` never reconciles, and commands on one theatre are serialised; verify the README example still runs as written
+- [x] 2.1 Replace `commands.open_theatre` with the `theatre_session(theatre, *, reconcile)` context manager (D2): `find_config` → `flock` on the `.troupe/` directory → load → import → reconcile; keep the set of reconciling commands in one named constant; verify `uv run pytest` passes
+- [x] 2.2 Make `set` hold the session (and so the lock) through compute, file writes and event recording; verify with a test that, while the test process holds `flock` on `.troupe/`, a `set` subprocess blocks and completes only after release
+- [x] 2.3 Wire `show` and `set` to reconcile first and `history` not to; verify the config-sync "Commands reconcile first" scenarios with tests (set after hand edit gives two events in order, reconcile persists when `show nope` exits 5, history does not reconcile but a later `show` does, exit 2 / exit 4 record nothing)
+- [x] 2.4 Replace `test_hand_edits_are_not_reconciled` with `test_hand_edits_are_not_imported` and update `test_set_records_old_value_from_the_files` to expect the reconcile event followed by the set event (config-history delta); verify both pass
+- [x] 2.5 Check that a theatre with no config file still creates nothing (lock taken only after `find_config`) and that invalid YAML creates no `events.sqlite`; verify the existing `test_cli.py` / `test_loading.py` state tests pass and add one for invalid YAML if missing
+- [x] 2.6 Update README ("State" section and decisions list) to say hand edits are now recorded by reconciling, `history` never reconciles, and commands on one theatre are serialised; verify the README example still runs as written
 
 ## 3. The watch command
 

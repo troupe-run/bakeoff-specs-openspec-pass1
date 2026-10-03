@@ -37,11 +37,12 @@ def test_any_command_imports_even_if_it_then_fails(make: Callable[[str], Theatre
     assert brief(t.run("history")) == [(1, "import", "a", None, 1)]
 
 
-def test_hand_edits_are_not_reconciled(make: Callable[[str], Theatre]) -> None:
+def test_hand_edits_are_not_imported(make: Callable[[str], Theatre]) -> None:
     t = make("a: 1\n")
     t.run("history")
     t.write("troupe.yml", "a: 2\n")
-    assert brief(t.run("history")) == [(1, "import", "a", None, 1)]
+    assert t.run("show", "a").code == 0
+    assert brief(t.run("history")) == [(1, "import", "a", None, 1), (2, "set", "a", 1, 2)]
 
 
 def test_set_records_old_value_from_the_files(make: Callable[[str], Theatre]) -> None:
@@ -49,7 +50,7 @@ def test_set_records_old_value_from_the_files(make: Callable[[str], Theatre]) ->
     t.run("history")
     t.write("troupe.yml", "a: 2\n")
     assert t.run("set", "a", "3").code == 0
-    assert brief(t.run("history"))[-1] == (2, "set", "a", 2, 3)
+    assert brief(t.run("history"))[1:] == [(2, "set", "a", 1, 2), (3, "set", "a", 2, 3)]
 
 
 def test_set_records_one_event_for_a_changed_scalar(make: Callable[[str], Theatre]) -> None:

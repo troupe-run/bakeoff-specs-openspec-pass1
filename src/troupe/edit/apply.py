@@ -13,7 +13,7 @@ from troupe.edit import ops as prim
 from troupe.edit.plan import AddKey, Append, Delete, Op, Replace, WriteText, plan
 from troupe.edit.text import apply_edits
 from troupe.errors import LoadError, WriteRefused
-from troupe.leaves import leaves
+from troupe.leaves import diff_leaves, leaves
 from troupe.loader import Config, load
 from troupe.paths import Path, format_path
 from troupe.schema import Data, same
@@ -43,7 +43,7 @@ def compute_set(theatre: FsPath, config: Config, path: Path, value: Data) -> Set
             f"{format_path(path)}: the edited files would not read back as intended; not writing"
         )
     writes = {current.files[k].path: t for k, t in texts.items() if t != original.get(k)}
-    return SetResult(writes, _changes(to_data(config.root), to_data(current.root)))
+    return SetResult(writes, diff_leaves(leaves(to_data(config.root)), leaves(to_data(current.root))))
 
 
 def _reload(theatre: FsPath, texts: dict[FsPath, str], path: Path) -> Config:
@@ -146,10 +146,3 @@ def _matches(node: Node, expected: Data) -> bool:
         return node.value == to_crlf(expected)
     assert isinstance(node, ScalarNode | TextNode)
     return same(node.value, expected)
-
-
-def _changes(before: Data, after: Data) -> list[Change]:
-    old, new = leaves(before), leaves(after)
-    removed = [Change("remove", p, v, None) for p, v in old.items() if p not in new]
-    changed = [Change("set", p, old.get(p), v) for p, v in new.items() if p not in old or not same(old[p], v)]
-    return removed + changed

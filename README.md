@@ -61,12 +61,18 @@ On failure stdout is empty and stderr names the path or file involved.
 ### State
 
 Change events are stored with the [`eventsourcing`](https://eventsourcing.readthedocs.io/) library in
-`<theatre>/.troupe/events.sqlite`. The first command run against a theatre imports its current values. Edits made
-by hand afterwards are not recorded as events, but `show` and `set` always read the files as they are now.
+`<theatre>/.troupe/events.sqlite`. The first command run against a theatre imports its current values.
+
+Edits made by hand are recorded by *reconciling*: troupe compares the files with the recorded configuration and
+records a `set` or `remove` event for each leaf that differs. A formatting-only or comment-only edit records nothing.
+`show` and `set` reconcile before doing anything else, so edits made while nothing was running are picked up.
+`history` never reconciles: it reports only what has been recorded. Commands against one theatre take turns (a lock
+on the `.troupe/` directory), so troupe never records its own write-back a second time.
 
 ## Decisions on points the contract leaves open
 
-These are recorded with their reasons in `openspec/changes/config-load-show-set/design.md`:
+These are recorded with their reasons in `openspec/changes/archive/2026-10-02-config-load-show-set/design.md`
+and `openspec/changes/config-sync-with-files/design.md`:
 
 1. Setting a key under a null or scalar value (e.g. `agents:` with nothing after it) exits 5. Set the parent to a
    mapping first: `set agents '{coder: {model: x}}'`.
@@ -75,7 +81,8 @@ These are recorded with their reasons in `openspec/changes/config-load-show-set/
 4. A string VALUE starting with `file:` becomes an include. If the result cannot load, the write is refused (exit 3).
 5. Mapping and list VALUEs are applied as a diff: unchanged entries keep their bytes, and keys missing from VALUE are
    deleted. Changing or deleting a YAML include through a parent path is refused (exit 3).
-6. Import happens on any command whose configuration loads, before the command runs.
+6. Import happens on any command whose configuration loads, before the command runs. So does reconciling (except for
+   `history`), and its events are kept even if the command then fails with exit 3 or 5.
 7. `history PATH` with no matches prints nothing and exits 0. `.inf`/`.nan` appear in JSON as the strings `".inf"`,
    `"-.inf"` and `".nan"`.
 8. Anchors, aliases and non-core tags fail to load (exit 4) for now.

@@ -97,6 +97,13 @@ def test_missing_include_target_exits_4_naming_it(theatre: Theatre) -> None:
     assert not (theatre.dir / "events.sqlite").exists()
 
 
+def test_invalid_yaml_creates_no_state(theatre: Theatre) -> None:
+    theatre.write("troupe.yml", "a: [1\n")
+    for args in (("show", "a"), ("set", "a", "1"), ("history",)):
+        assert theatre.run(*args).code == 4
+    assert sorted(p.name for p in theatre.dir.iterdir()) == ["troupe.yml"]
+
+
 def test_include_cycle_exits_4(theatre: Theatre) -> None:
     theatre.write("troupe.yml", "a: file:a.yaml\n")
     theatre.write("a.yaml", "b: file:b.yaml\n")
