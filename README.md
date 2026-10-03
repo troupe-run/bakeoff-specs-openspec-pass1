@@ -23,6 +23,7 @@ Every command takes `--theatre DIR` (default: the current directory).
 | `troupe config show PATH` | Print the scalar at `PATH` |
 | `troupe config set PATH VALUE` | Change or create the value at `PATH` and write it back into the file that holds it |
 | `troupe config history [PATH]` | Print the change events as JSON Lines, oldest first, optionally only for `PATH` and below |
+| `troupe config watch` | Record hand edits to the files as they happen, until Ctrl-C (SIGINT) or SIGTERM |
 
 `PATH` is dotted (`agents.coder.model`); a numeric segment indexes a list (`tools.0`). `VALUE` is one YAML 1.2 flow
 node: `0.2` is a float, `true` a boolean, `abc` and `"0.2"` strings, `{a: 1}` a mapping, `[a, b]` a list, and
@@ -38,6 +39,23 @@ uv run troupe config set agents.coder.model small --theatre /tmp/demo   # model:
 uv run troupe config set agents.coder.tools '[read, write]' --theatre /tmp/demo
 uv run troupe config history agents.coder --theatre /tmp/demo
 ```
+
+### Watching for hand edits
+
+`troupe config watch` runs in the foreground. Once it is watching, it prints one line, `watching <dir>`. From then
+on, within 2 seconds of any change to `troupe.yml` or a file it includes (including files included by a later edit),
+it reconciles (see [State](#state)). It prints nothing else to stdout. If an edit leaves the configuration unloadable
+(say, half-typed YAML), it reports this once on stderr and carries on, then picks up the change once the files load
+again. SIGINT or SIGTERM stop it with exit code 0.
+
+```sh
+uv run troupe config watch --theatre /tmp/demo &        # watching /tmp/demo
+sed -i.bak 's/small/tiny/' /tmp/demo/.troupe/troupe.yml && rm /tmp/demo/.troupe/troupe.yml.bak
+sleep 2; uv run troupe config history agents.coder.model --theatre /tmp/demo   # ... "old": "small", "new": "tiny"
+kill %1
+```
+
+A `set` made while `watch` runs records exactly its own events. Its write-back is not picked up again.
 
 ### Includes
 
@@ -89,6 +107,13 @@ and `openspec/changes/config-sync-with-files/design.md`:
 9. A new key that would read back as a non-string when written plain (e.g. `true`) is quoted.
 10. Every `set` is verified before writing: the edited text is re-read and must give exactly the intended
     configuration, otherwise nothing is written (exit 3).
+11. `watch` on a theatre that cannot be loaded exits 4 without printing its line. Once it is running, a load failure
+    does not stop it: it reports the error once on stderr and resumes when the files load again.
+12. `watch` prints only its `watching <dir>` line to stdout. `<dir>` is the theatre as given (`--theatre` or
+    `TROUPE_THEATRE`), not resolved, or the absolute current directory when neither is given.
+13. Reconcile records removes in the order they were recorded, then sets in the files' document order.
+14. `watch` reads the watched files every 0.2 s and reconciles once a change has read the same twice in a row. That
+    way it does not record a file that an editor has emptied halfway through a save.
 
 ## Development
 
@@ -101,4 +126,5 @@ uv run ruff check && uv run ruff format --check
 Code map: `src/troupe/loader.py` (files and includes), `tree.py` (YAML nodes with source positions), `schema.py`
 (core-schema types and printing), `store.py` (event store), `edit/` (byte-surgical write-back:
 `plan.py` → `ops.py` → `apply.py`, with `scalars.py`, `blocks.py`, `folded.py` and `text.py` holding the quoting,
-block-scalar, folding and layout rules), `commands.py` and `cli.py`.
+block-scalar, folding and layout rules), `sync.py` (reconcile), `commands.py` (subcommands, the theatre lock
+and the `watch` loop) and `cli.py`.

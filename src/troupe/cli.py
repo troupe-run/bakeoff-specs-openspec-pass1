@@ -1,4 +1,4 @@
-"""Command-line entry point: `troupe config <show|set|history> [--theatre DIR] …`."""
+"""Command-line entry point: `troupe config <show|set|history|watch> [--theatre DIR] …`."""
 
 import argparse
 import os
@@ -38,18 +38,24 @@ def _parser() -> argparse.ArgumentParser:
     set_.add_argument("value")
     history = sub.add_parser("history", parents=[theatre], help="list configuration changes as JSON Lines")
     history.add_argument("path", nargs="?")
+    sub.add_parser("watch", parents=[theatre], help="record hand edits to the files as they happen")
     return parser
 
 
 def run(argv: Sequence[str]) -> str:
     """Run a command and return what it prints; raises TroupeError on failure."""
     args = _parser().parse_args(argv)
-    theatre = Path(getattr(args, "theatre", os.environ.get("TROUPE_THEATRE") or "."))
+    given: str | None = getattr(args, "theatre", None) or os.environ.get("TROUPE_THEATRE") or None
+    theatre = Path(given or ".")
     if args.command == "show":
         return commands.show(theatre, parse_path(args.path))
     if args.command == "set":
         path = parse_path(args.path)
         commands.set_value(theatre, path, parse_value(args.value))
+        return ""
+    if args.command == "watch":
+        # Shown as given (not resolved, which would turn macOS /var/… into /private/var/…).
+        commands.watch(theatre, given or os.getcwd(), sys.stdout)
         return ""
     prefix = parse_path(args.path) if args.path is not None else None
     return commands.history(theatre, prefix)

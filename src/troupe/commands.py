@@ -1,19 +1,24 @@
-"""The `troupe config` subcommands: show, set and history."""
+"""The `troupe config` subcommands: show, set, history and watch."""
 
 import fcntl
 import json
 import math
 import os
-from collections.abc import Iterator
+import signal
+import sys
+import threading
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path as FsPath
+from typing import TextIO
 
 from troupe.edit.apply import compute_set
 from troupe.errors import LoadError, PathError
 from troupe.leaves import leaves
-from troupe.loader import Config, find_config, load, state_dir
+from troupe.loader import CONFIG_NAMES, Config, find_config, load, state_dir
 from troupe.paths import Path, format_path, is_index
 from troupe.schema import Data, Scalar, show_text
+from troupe.source import read_source
 from troupe.store import ConfigStore
 from troupe.sync import reconcile
 from troupe.tree import MappingNode, Node, ScalarNode, SequenceNode, TextNode, to_data
@@ -44,15 +49,19 @@ def theatre_lock(theatre: FsPath) -> Iterator[None]:
 
 
 @contextmanager
-def theatre_session(theatre: FsPath, command: str) -> Iterator[tuple[Config, ConfigStore]]:
+def theatre_session(
+    theatre: FsPath, command: str, store: ConfigStore | None = None
+) -> Iterator[tuple[Config, ConfigStore]]:
     """Under the theatre lock: load, import on the first command, reconcile if `command` does, then run.
 
     The config file is located before locking, so a theatre with none exits 4 without anything created.
+    The store is opened only once the configuration has loaded; a long-running command may pass its own.
     """
     find_config(theatre)
     with theatre_lock(theatre):
         config = load(theatre)
-        store = ConfigStore(state_dir(theatre))
+        if store is None:
+            store = ConfigStore(state_dir(theatre))
         if not store.is_imported():
             store.import_leaves(leaves(to_data(config.root)))
         if command in RECONCILING_COMMANDS:
@@ -124,3 +133,103 @@ def history(theatre: FsPath, path: Path | None) -> str:
         }
         lines.append(json.dumps(obj, ensure_ascii=False, allow_nan=False) + "\n")
     return "".join(lines)
+
+
+# --- watch -------------------------------------------------------------------------------------------------
+
+POLL_INTERVAL = 0.2  # seconds between reads of the watched files
+SETTLE_POLLS = 2  # a change is reconciled once the files read the same on this many consecutive polls
+
+
+class _Unreadable:
+    """A watched file that exists but cannot be read as UTF-8 text."""
+
+
+_UNREADABLE = _Unreadable()
+
+# What each watched file holds: its text, None if it does not exist, or _UNREADABLE.
+Snapshot = dict[FsPath, str | _Unreadable | None]
+
+
+def _read_files(paths: Iterable[FsPath]) -> Snapshot:
+    snapshot: Snapshot = {}
+    for path in paths:
+        if not path.exists():
+            snapshot[path] = None
+            continue
+        try:
+            snapshot[path] = read_source(path).text
+        except LoadError:
+            snapshot[path] = _UNREADABLE
+    return snapshot
+
+
+def _baseline(theatre: FsPath, config: Config) -> Snapshot:
+    """The watched files as they were when `config` was loaded: every file it read, plus both config names.
+
+    Using the loader's own texts means no edit can slip in between loading and starting to watch.
+    """
+    snapshot: Snapshot = {path: src.text for path, src in config.files.items()}
+    for name in CONFIG_NAMES:
+        snapshot.setdefault((state_dir(theatre) / name).resolve(), None)
+    return snapshot
+
+
+class _Watcher:
+    def __init__(self, theatre: FsPath) -> None:
+        self.theatre = theatre
+        self.store: ConfigStore | None = None
+        self.baseline: Snapshot | None = None  # None while the configuration does not load
+        self.last_error: str | None = None
+        self.pending: Snapshot | None = None
+        self.stable = 0
+
+    def start(self) -> None:
+        """Load, import and reconcile; a load failure here propagates (exit 4)."""
+        with theatre_session(self.theatre, "watch") as (config, store):
+            self.store = store
+            self.baseline = _baseline(self.theatre, config)
+
+    def poll(self) -> None:
+        if self.baseline is None:
+            self.reconcile()  # nothing loaded to compare with: retry the whole load every poll
+            return
+        current = _read_files(self.baseline)
+        if current == self.baseline:
+            self.pending, self.stable = None, 0
+            return
+        if current != self.pending:
+            self.pending, self.stable = current, 0
+        self.stable += 1
+        if self.stable >= SETTLE_POLLS:
+            self.pending, self.stable = None, 0
+            self.reconcile()
+
+    def reconcile(self) -> None:
+        try:
+            with theatre_session(self.theatre, "watch", self.store) as (config, store):
+                self.store = store
+                self.baseline = _baseline(self.theatre, config)
+        except LoadError as e:
+            self.baseline = None
+            if str(e) != self.last_error:
+                self.last_error = str(e)
+                print(f"troupe: {e}", file=sys.stderr, flush=True)
+        else:
+            self.last_error = None
+
+
+def watch(theatre: FsPath, display: str, out: TextIO) -> None:
+    """Reconcile now and whenever the config file or an included file changes, until SIGINT or SIGTERM.
+
+    The signal handlers only set a flag, checked between cycles, so a reconcile in progress always finishes.
+    """
+    stop = threading.Event()
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, lambda _signum, _frame: stop.set())
+    watcher = _Watcher(theatre)
+    watcher.start()
+    out.write(f"watching {display}\n")
+    out.flush()
+    while not stop.wait(POLL_INTERVAL):
+        watcher.poll()

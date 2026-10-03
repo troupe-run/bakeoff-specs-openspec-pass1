@@ -47,16 +47,17 @@ hand edit with the same effect record the same events.
 events describe.
 
 ### D2. One session per command, under a per-theatre lock
-Replace `open_theatre()` with a context manager `theatre_session(theatre, *, reconcile: bool)`:
+Replace `open_theatre()` with a context manager `theatre_session(theatre, command, store=None)`:
 1. `find_config()`. With no config file this exits 4 before anything is created.
 2. Open the `.troupe/` **directory** read-only and `fcntl.flock(fd, LOCK_EX)` (blocking). The lock is released when
    the session ends or the process dies.
-3. `load()` (exit 4), open `ConfigStore`, import if needed, then reconcile if `reconcile` is true.
+3. `load()` (exit 4), open `ConfigStore` (unless `watch` passes in its long-lived one, D8), import if needed, then
+   reconcile if `command` is one of `RECONCILING_COMMANDS`.
 4. Yield `(config, store)`. The command does its work, and for `set` that includes writing the files and recording
    its events, before the lock is released.
 
 Which commands reconcile is decided in one place, `RECONCILING_COMMANDS = {"show", "set", "watch"}` in `commands.py`.
-`history` uses `reconcile=False`, but it still takes the lock because it may import.
+`history` is not in it, but it still takes the lock because it may import.
 
 Why this gives "the write-back produces no further events": every reconcile runs inside the lock and loads the files
 at that moment. A `set` releases the lock only after its events are recorded. Any reconcile that runs after the

@@ -1,8 +1,11 @@
 """End-to-end: the real `uv run troupe config …` command from the repository root."""
 
 import json
+import selectors
 import shutil
+import signal
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -109,3 +112,39 @@ def test_missing_config_exits_4_through_uv_run(tmp_path: Path) -> None:
     r = troupe(tmp_path, "history")
     assert (r.returncode, r.stdout) == (4, "")
     assert "troupe.yml" in r.stderr
+
+
+def test_watch_through_uv_run_records_a_hand_edit_and_stops_on_sigterm(theatre: Path) -> None:
+    proc = subprocess.Popen(
+        ["uv", "run", "--quiet", "troupe", "config", "watch", "--theatre", str(theatre)],
+        cwd=REPO,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        assert proc.stdout is not None
+        selector = selectors.DefaultSelector()
+        selector.register(proc.stdout, selectors.EVENT_READ)
+        assert selector.select(timeout=60), "watch did not print its line"
+        line = proc.stdout.readline()
+        assert line == f"watching {theatre}\n".encode()
+
+        start = time.monotonic()
+        (theatre / ".troupe/agents/coder.yaml").write_bytes(
+            b"model: huge  # strongest\nprompt: file:coder.md\n"
+        )
+        while True:
+            r = troupe(theatre, "history", "agents.coder.model")
+            if '"new": "huge"' in r.stdout:
+                break
+            assert time.monotonic() - start < 10, r.stdout
+            time.sleep(0.1)
+        assert json.loads(r.stdout.splitlines()[-1])["old"] == "big"
+
+        proc.send_signal(signal.SIGTERM)
+        out, err = proc.communicate(timeout=20)
+        assert (proc.returncode, out, err) == (0, b"", b"")
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.communicate()

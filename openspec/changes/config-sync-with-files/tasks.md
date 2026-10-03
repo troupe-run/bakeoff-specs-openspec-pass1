@@ -9,7 +9,7 @@
 
 ## 2. Sessions, lock and reconcile-first commands
 
-- [x] 2.1 Replace `commands.open_theatre` with the `theatre_session(theatre, *, reconcile)` context manager (D2): `find_config` → `flock` on the `.troupe/` directory → load → import → reconcile; keep the set of reconciling commands in one named constant; verify `uv run pytest` passes
+- [x] 2.1 Replace `commands.open_theatre` with the `theatre_session(theatre, command, store=None)` context manager (D2): `find_config` → `flock` on the `.troupe/` directory → load → import → reconcile; keep the set of reconciling commands in one named constant; verify `uv run pytest` passes
 - [x] 2.2 Make `set` hold the session (and so the lock) through compute, file writes and event recording; verify with a test that, while the test process holds `flock` on `.troupe/`, a `set` subprocess blocks and completes only after release
 - [x] 2.3 Wire `show` and `set` to reconcile first and `history` not to; verify the config-sync "Commands reconcile first" scenarios with tests (set after hand edit gives two events in order, reconcile persists when `show nope` exits 5, history does not reconcile but a later `show` does, exit 2 / exit 4 record nothing)
 - [x] 2.4 Replace `test_hand_edits_are_not_reconciled` with `test_hand_edits_are_not_imported` and update `test_set_records_old_value_from_the_files` to expect the reconcile event followed by the set event (config-history delta); verify both pass
@@ -18,14 +18,14 @@
 
 ## 3. The watch command
 
-- [ ] 3.1 Add the `watch` subparser (no positional arguments) and the `<dir>` display rule (D4) in `cli.py`; verify `troupe config watch extra` exits 2 with a usage message and empty stdout
-- [ ] 3.2 Implement `commands.watch` (D3–D6): signal handlers → initial session → baseline from `Config.files` texts plus config-file candidates → print and flush `watching <dir>` → poll every `POLL_INTERVAL` with the `SETTLE_POLLS` settle rule → reconcile under the session → new baseline; LoadError while watching reported once to stderr and retried every poll; verify with `uv run mypy` and `uv run ruff check`
-- [ ] 3.3 Add a subprocess helper in `tests/test_watch.py` (start `python -m troupe.cli config watch`, wait for the ready line with a timeout, poll `history` up to a 2 s deadline, stop with a signal) and tests for: ready line text and flush, live edit reconciled within 2 s, edit to an included file, save-by-rename, comment-only edit records nothing, SIGINT and SIGTERM each exit 0 with exact stdout and empty stderr; verify they pass
-- [ ] 3.4 Add tests for startup and failure handling: unloadable theatre at start exits 4 with no line and creates nothing; broken-then-fixed file reports once on stderr, keeps running and records only the final `set a`; verify they pass
-- [ ] 3.5 Add tests for write-backs: `set model b` while `watch` runs adds exactly its own event after waiting 2.5 s; same for a `set` into an included YAML file; a hand edit after that `set` records `old` equal to the set's new value (D8); verify they pass
-- [ ] 3.6 Add tests for includes added by hand: new YAML include recorded as `set` events within 2 s, then an edit to the newly included file recorded within 2 s; an include added while nothing runs is picked up by `show`; verify they pass
-- [ ] 3.7 Add a smoke test in `tests/test_smoke.py` that runs `uv run troupe config watch --theatre DIR`, waits for the line, makes a hand edit, sees the event within 2 s, sends SIGTERM and gets exit 0; verify it passes
-- [ ] 3.8 Document `watch` in README (commands table, what reconcile means, exit on SIGINT/SIGTERM, decisions from design.md); verify the documented commands run as written
+- [x] 3.1 Add the `watch` subparser (no positional arguments) and the `<dir>` display rule (D4) in `cli.py`; verify `troupe config watch extra` exits 2 with a usage message and empty stdout
+- [x] 3.2 Implement `commands.watch` (D3–D6): signal handlers → initial session → baseline from `Config.files` texts plus config-file candidates → print and flush `watching <dir>` → poll every `POLL_INTERVAL` with the `SETTLE_POLLS` settle rule → reconcile under the session → new baseline; LoadError while watching reported once to stderr and retried every poll; verify with `uv run mypy` and `uv run ruff check`
+- [x] 3.3 Add a subprocess helper in `tests/test_watch.py` (start `python -m troupe.cli config watch`, wait for the ready line with a timeout, poll `history` up to a 2 s deadline, stop with a signal) and tests for: ready line text and flush, live edit reconciled within 2 s, edit to an included file, save-by-rename, comment-only edit records nothing, SIGINT and SIGTERM each exit 0 with exact stdout and empty stderr; verify they pass
+- [x] 3.4 Add tests for startup and failure handling: unloadable theatre at start exits 4 with no line and creates nothing; broken-then-fixed file reports once on stderr, keeps running and records only the final `set a`; verify they pass
+- [x] 3.5 Add tests for write-backs: `set model b` while `watch` runs adds exactly its own event after waiting 2.5 s; same for a `set` into an included YAML file; a hand edit after that `set` records `old` equal to the set's new value (D8); verify they pass
+- [x] 3.6 Add tests for includes added by hand: new YAML include recorded as `set` events within 2 s, then an edit to the newly included file recorded within 2 s; an include added while nothing runs is picked up by `show`; verify they pass
+- [x] 3.7 Add a smoke test in `tests/test_smoke.py` that runs `uv run troupe config watch --theatre DIR`, waits for the line, makes a hand edit, sees the event within 2 s, sends SIGTERM and gets exit 0; verify it passes
+- [x] 3.8 Document `watch` in README (commands table, what reconcile means, exit on SIGINT/SIGTERM, decisions from design.md); verify the documented commands run as written
 
 ## 4. Integration
 
