@@ -1,4 +1,4 @@
-"""The `troupe config` subcommands: show, set, history and watch."""
+"""The `troupe config` subcommands: get, show, set, history and watch."""
 
 import fcntl
 import json
@@ -17,6 +17,7 @@ from troupe.errors import LoadError, PathError
 from troupe.leaves import leaves
 from troupe.loader import CONFIG_NAMES, Config, find_config, load, state_dir
 from troupe.paths import Path, format_path, is_index
+from troupe.render import render
 from troupe.schema import Data, Scalar, show_text
 from troupe.source import read_source
 from troupe.store import ConfigStore
@@ -24,7 +25,7 @@ from troupe.sync import reconcile
 from troupe.tree import MappingNode, Node, ScalarNode, SequenceNode, TextNode, to_data
 
 # Every command reconciles before its own work, except `history`, which reports only what has been recorded.
-RECONCILING_COMMANDS = frozenset({"show", "set", "watch"})
+RECONCILING_COMMANDS = frozenset({"get", "show", "set", "watch"})
 
 
 @contextmanager
@@ -89,13 +90,27 @@ def find(root: Node, path: Path) -> Node:
     return node
 
 
-def show(theatre: FsPath, path: Path) -> str:
-    with theatre_session(theatre, "show") as (config, _):
+def get(theatre: FsPath, path: Path) -> str:
+    """The scalar at `path`, printed; a mapping or list is refused with a pointer to `show`."""
+    with theatre_session(theatre, "get") as (config, _):
         node = find(config.root, path)
     if not isinstance(node, ScalarNode | TextNode):
         kind = "mapping" if isinstance(node, MappingNode) else "list"
-        raise PathError(f"{format_path(path)}: is a {kind}, not a scalar")
+        where = format_path(path)
+        raise PathError(f"{where}: is a {kind}, not a scalar (use `troupe config show {where}` to print it)")
     return show_text(node.value)
+
+
+def show(theatre: FsPath, path: Path | None, sources: bool) -> str:
+    """The value at `path` (or the whole configuration): a scalar as `get` prints it, anything else as YAML.
+
+    With `sources`, the output is always YAML, with each scalar's file in an end-of-line comment.
+    """
+    with theatre_session(theatre, "show") as (config, _):
+        node = config.root if path is None else find(config.root, path)
+    if isinstance(node, ScalarNode | TextNode) and not sources:
+        return show_text(node.value)
+    return render(node, theatre, sources=sources)
 
 
 def set_value(theatre: FsPath, path: Path, value: Data) -> None:

@@ -1,4 +1,4 @@
-"""Command-line entry point: `troupe config <show|set|history|watch> [--theatre DIR] …`."""
+"""Command-line entry point: `troupe config <get|show|set|history|watch> [--theatre DIR] …`."""
 
 import argparse
 import os
@@ -31,8 +31,11 @@ def _parser() -> argparse.ArgumentParser:
     config = groups.add_parser("config", parents=[theatre], help="read and change the configuration")
     sub = config.add_subparsers(dest="command", required=True, parser_class=_Parser)
 
-    show = sub.add_parser("show", parents=[theatre], help="print a setting's value")
-    show.add_argument("path")
+    get = sub.add_parser("get", parents=[theatre], help="print a scalar setting's value")
+    get.add_argument("path")
+    show = sub.add_parser("show", parents=[theatre], help="print a value or a section as YAML")
+    show.add_argument("path", nargs="?")
+    show.add_argument("--sources", action="store_true", help="say which file each value comes from")
     set_ = sub.add_parser("set", parents=[theatre], help="change a setting and write it back")
     set_.add_argument("path")
     set_.add_argument("value")
@@ -47,8 +50,11 @@ def run(argv: Sequence[str]) -> str:
     args = _parser().parse_args(argv)
     given: str | None = getattr(args, "theatre", None) or os.environ.get("TROUPE_THEATRE") or None
     theatre = Path(given or ".")
+    if args.command == "get":
+        return commands.get(theatre, parse_path(args.path))
     if args.command == "show":
-        return commands.show(theatre, parse_path(args.path))
+        path = parse_path(args.path) if args.path is not None else None
+        return commands.show(theatre, path, args.sources)
     if args.command == "set":
         path = parse_path(args.path)
         commands.set_value(theatre, path, parse_value(args.value))

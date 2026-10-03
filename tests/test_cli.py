@@ -36,13 +36,30 @@ def test_theatre_option_may_come_before_the_subcommand(
     assert run("--theatre", str(t.root), "show", "model").out == "x\n"
 
 
-@pytest.mark.parametrize("args", [("frobnicate",), ("set", "model"), ("show",), ("show", "a", "b")])
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("frobnicate",),
+        ("set", "model"),
+        ("get",),
+        ("get", "a", "b"),
+        ("show", "a", "b"),
+        ("get", "a", "--sources"),
+    ],
+)
 def test_bad_command_lines_exit_2_with_empty_stdout(
     make: Callable[[str], Theatre], args: tuple[str, ...]
 ) -> None:
     r = make("model: x\n").run(*args)
     assert (r.code, r.out) == (2, "")
     assert r.err
+
+
+@pytest.mark.parametrize("args", [("show",), ("show", "--sources")])
+def test_show_takes_an_optional_path(make: Callable[[str], Theatre], args: tuple[str, ...]) -> None:
+    r = make("model: x\n").run(*args)
+    assert r.code == 0
+    assert r.out.startswith("model: x")
 
 
 def test_bad_path_syntax_exits_2_naming_the_path(make: Callable[[str], Theatre]) -> None:
@@ -65,9 +82,15 @@ def test_read_commands_leave_every_user_file_untouched(theatre: Theatre) -> None
     theatre.write("x.yaml", "k: v\n")
     (theatre.root / "outside.txt").write_text("o")
     before = theatre.snapshot()
-    theatre.run("show", "a")
-    theatre.run("history")
-    theatre.run("show", "nope")
+    for args in (
+        ("get", "a"),
+        ("show", "a"),
+        ("show",),
+        ("show", "--sources"),
+        ("history",),
+        ("show", "nope"),
+    ):
+        theatre.run(*args)
     assert theatre.snapshot() == before
     new = {p.name for p in theatre.root.rglob("*")} - {Path(k).name for k in before} - {"agents", ".troupe"}
     assert all(name.startswith("events.sqlite") for name in new)

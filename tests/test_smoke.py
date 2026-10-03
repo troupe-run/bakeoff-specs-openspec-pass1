@@ -98,9 +98,26 @@ def test_show_set_and_history_through_uv_run(theatre: Path) -> None:
     assert lines[-1]["old"] == "You write code.\r\nBe brief.\r\n" and lines[-1]["new"] == "Write tests.\r\n"
 
 
+def test_get_and_show_sources_through_uv_run(theatre: Path) -> None:
+    r = troupe(theatre, "get", "agents.coder.model")
+    assert (r.returncode, r.stdout, r.stderr) == (0, "big\n", "")
+    r = troupe(theatre, "show", "agents.coder", "--sources")
+    assert (r.returncode, r.stderr) == (0, "")
+    assert r.stdout == (
+        "model: big # from .troupe/agents/coder.yaml\n"
+        'prompt: "You write code.\\r\\nBe brief.\\r\\n" # from .troupe/agents/coder.md\n'
+    )
+
+
 @pytest.mark.parametrize(
     ("args", "code"),
-    [(("show", "agents"), 5), (("set", "agents.coder", "x"), 3), (("show", "a..b"), 2), (("bogus",), 2)],
+    [
+        (("get", "agents"), 5),
+        (("show", "nope"), 5),
+        (("set", "agents.coder", "x"), 3),
+        (("show", "a..b"), 2),
+        (("bogus",), 2),
+    ],
 )
 def test_exit_codes_through_uv_run(theatre: Path, args: tuple[str, ...], code: int) -> None:
     r = troupe(theatre, *args)

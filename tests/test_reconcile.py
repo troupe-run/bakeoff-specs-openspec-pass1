@@ -5,6 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import pytest
 from test_history import events
 
 from conftest import Theatre
@@ -163,6 +164,26 @@ def test_reconcile_persists_when_the_command_then_fails(make: Callable[[str], Th
     t.run("history")
     t.write("troupe.yml", "a: 2\n")
     assert t.run("show", "nope").code == 5
+    assert added(t, 1) == [("set", "a", 1, 2)]
+
+
+@pytest.mark.parametrize("command", [("get", "a"), ("show", "a"), ("show",), ("show", "--sources")])
+def test_get_and_show_reconcile_a_hand_edit_once(
+    make: Callable[[str], Theatre], command: tuple[str, ...]
+) -> None:
+    t = make("a: 1\n")
+    t.run("history")
+    t.write("troupe.yml", "a: 2\n")
+    assert t.run(*command).code == 0
+    assert t.run(*command).code == 0
+    assert added(t, 1) == [("set", "a", 1, 2)]
+
+
+def test_reconcile_persists_when_get_then_fails(make: Callable[[str], Theatre]) -> None:
+    t = make("a: 1\n")
+    t.run("history")
+    t.write("troupe.yml", "a: 2\n")
+    assert t.run("get", "nope").code == 5
     assert added(t, 1) == [("set", "a", 1, 2)]
 
 

@@ -97,3 +97,16 @@ def refused(make: Callable[[str], Theatre]) -> Callable[..., Result]:
         return r
 
     return _refused
+
+
+@pytest.fixture
+def full(theatre: Theatre) -> Theatre:
+    """The theatre from the config-show scenarios: a YAML include, a text include and a flow list."""
+    theatre.write(
+        "troupe.yml",
+        "model: claude-opus-5-5\nagents:\n  coder: file:agents/coder.yaml\nprompt: file:prompt.md\n"
+        "tools: [read, write]\n",
+    )
+    theatre.write("agents/coder.yaml", "model: m1\ntemperature: 0.2\n")
+    theatre.write("prompt.md", "Hello\nWorld\n")
+    return theatre
