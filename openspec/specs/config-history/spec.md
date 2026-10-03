@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Keeps a durable, per-leaf record of how a theatre's configuration has changed (its initial import and every `set`)
-and lets users list that record, optionally filtered to a path.
+Keeps a durable, per-leaf record of how a theatre's configuration has changed (its initial import, every `set`,
+and every hand edit picked up by reconciling) and lets users list that record, optionally filtered to a path.
 
 ## Requirements
 
@@ -17,12 +17,12 @@ no leaves.
 - **WHEN** `set model b` runs and then a separate `history` process runs
 - **THEN** the second process prints the `set` event
 
-### Requirement: Import on first command
+### Requirement: Import on a theatre's first command
 The first command run against a theatre whose configuration loads SHALL import it before doing its own work,
 recording one `import` event per leaf in document order with `old` null. Every subcommand imports, including
-`history`, and the import persists even if the command then exits 3 or 5. A theatre is imported at most once. Later
-hand edits to the files SHALL NOT generate events (importing is not reconciling). Nothing SHALL be imported or stored
-when the configuration cannot be loaded or the command line is invalid.
+`history` and `watch`, and the import persists even if the command then exits 3 or 5. A theatre is imported at most
+once. Hand edits made after the import SHALL be recorded only by reconciling (see config-sync), never by importing
+again. Nothing SHALL be imported or stored when the configuration cannot be loaded or the command line is invalid.
 
 #### Scenario: First history imports
 - **WHEN** the config is `a: 1\nb: [x, y]\n` and `history` is the first command run
@@ -32,9 +32,9 @@ when the configuration cannot be loaded or the command line is invalid.
 - **WHEN** `history` runs twice
 - **THEN** both runs print the same import events and no new events are added
 
-#### Scenario: Hand edits are not reconciled
-- **WHEN** the theatre was imported with `a: 1`, the user then edits it to `a: 2` by hand, and `history` runs
-- **THEN** no event mentions the value 2
+#### Scenario: Hand edits are not imported
+- **WHEN** the theatre was imported with `a: 1`, the user then edits it to `a: 2` by hand, and `show a` runs
+- **THEN** no `import` event mentions the value 2. The edit is recorded as a `set` event
 
 #### Scenario: Empty configuration
 - **WHEN** the config file is empty and `history` runs
@@ -44,7 +44,8 @@ when the configuration cannot be loaded or the command line is invalid.
 A `set` SHALL record, atomically and only after the files are written, one `remove` event (`new` null) for each leaf
 that no longer exists, in old document order, followed by one `set` event for each leaf whose value it changes or
 creates, in new document order. `old` SHALL be the leaf's value as loaded from the files just before the `set` (null
-for a created leaf). A `set` that changes nothing, or that fails, SHALL record nothing.
+for a created leaf). Because `set` reconciles first (see config-sync), any hand edit is recorded before the `set`'s
+own events. A `set` that changes nothing, or that fails, SHALL record no events of its own.
 
 #### Scenario: Changing a scalar
 - **WHEN** `model` is `a` and `set model b` runs
@@ -52,7 +53,7 @@ for a created leaf). A `set` that changes nothing, or that fails, SHALL record n
 
 #### Scenario: Old value comes from the files
 - **WHEN** the theatre was imported with `a: 1`, the user edits it by hand to `a: 2`, and `set a 3` runs
-- **THEN** the added event has old `2` and new `3`
+- **THEN** the last event added has old `2` and new `3`, and it comes right after the reconcile event `set a` (old 1, new 2)
 
 #### Scenario: Scalar replaced by a mapping
 - **WHEN** `a` is `1` and `set a "{b: 2, c: 3}"` runs
@@ -63,7 +64,7 @@ for a created leaf). A `set` that changes nothing, or that fails, SHALL record n
 - **THEN** exactly one event is added, for `a.c`
 
 #### Scenario: Refused set records nothing
-- **WHEN** a `set` exits 3
+- **WHEN** the files match the recorded configuration and a `set` exits 3
 - **THEN** no `set` or `remove` event is added
 
 ### Requirement: Listing history

@@ -9,7 +9,8 @@ scalars are printed, and how failures are reported through exit codes and messag
 
 ### Requirement: Invocation and theatre selection
 The CLI SHALL be invocable as `uv run troupe config <subcommand> [--theatre <dir>] [arguments]` from the repository
-root, with subcommands `show`, `set` and `history`. `--theatre` SHALL default to the current working directory.
+root, with subcommands `show`, `set`, `history` and `watch`. `--theatre` SHALL default to the current working
+directory.
 
 #### Scenario: Explicit theatre
 - **WHEN** `uv run troupe config show model --theatre /tmp/t` is run and `/tmp/t/.troupe/troupe.yml` contains `model: x`
@@ -21,6 +22,10 @@ root, with subcommands `show`, `set` and `history`. `--theatre` SHALL default to
 
 #### Scenario: Unknown subcommand or missing argument
 - **WHEN** `troupe config frobnicate` or `troupe config set model` (no VALUE) is run
+- **THEN** the exit code is 2, stdout is empty and stderr has a usage message
+
+#### Scenario: watch takes no positional argument
+- **WHEN** `troupe config watch extra` is run
 - **THEN** the exit code is 2, stdout is empty and stderr has a usage message
 
 ### Requirement: Path syntax
@@ -87,8 +92,8 @@ file except as `set`'s write-back rules require, and SHALL NOT create any state 
 loaded.
 
 #### Scenario: show leaves user files untouched
-- **WHEN** `show` and `history` run against a theatre
-- **THEN** every file outside `.troupe/` and every configuration file inside it is byte-identical to before, and new files appear only under `.troupe/`
+- **WHEN** `show`, `history` and `watch` run against a theatre, including while files are edited by hand during `watch`
+- **THEN** no configuration file is created or modified by troupe, and new files appear only under `.troupe/`
 
 #### Scenario: Unloadable theatre creates no state
 - **WHEN** any subcommand runs against a directory with no `.troupe/troupe.yml` or `.yaml`
