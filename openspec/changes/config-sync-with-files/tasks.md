@@ -29,6 +29,6 @@
 
 ## 4. Integration
 
-- [ ] 4.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`; verify all are clean and show the output
-- [ ] 4.2 Run `openspec validate config-sync-with-files --strict`; verify it reports the change as valid
-- [ ] 4.3 Commit the work on `main` in small steps with messages that say why (no push, no PR); verify `git status` is clean and `git log` shows the commits
+- [x] 4.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`; verify all are clean and show the output
+- [x] 4.2 Run `openspec validate config-sync-with-files --strict`; verify it reports the change as valid
+- [x] 4.3 Commit the work on `main` in small steps with messages that say why (no push, no PR); verify `git status` is clean and `git log` shows the commits
