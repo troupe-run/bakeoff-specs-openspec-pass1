@@ -20,7 +20,8 @@ Every command takes `--theatre DIR` (default: the current directory).
 
 | Command | What it does |
 |---|---|
-| `troupe config show PATH` | Print the scalar at `PATH` |
+| `troupe config get PATH` | Print the scalar at `PATH` (a mapping or list exits 5: use `show`) |
+| `troupe config show [PATH] [--sources]` | Print the value at `PATH`, or the whole configuration, as YAML with includes resolved; `--sources` says which file each value comes from |
 | `troupe config set PATH VALUE` | Change or create the value at `PATH` and write it back into the file that holds it |
 | `troupe config history [PATH]` | Print the change events as JSON Lines, oldest first, optionally only for `PATH` and below |
 | `troupe config watch` | Record hand edits to the files as they happen, until Ctrl-C (SIGINT) or SIGTERM |
@@ -34,7 +35,7 @@ Example, from the repository root:
 ```sh
 mkdir -p /tmp/demo/.troupe
 printf 'agents:\n  coder:\n    model: big   # strongest\n' > /tmp/demo/.troupe/troupe.yml
-uv run troupe config show agents.coder.model --theatre /tmp/demo        # big
+uv run troupe config get agents.coder.model --theatre /tmp/demo         # big
 uv run troupe config set agents.coder.model small --theatre /tmp/demo   # model: small # strongest
 uv run troupe config set agents.coder.tools '[read, write]' --theatre /tmp/demo
 uv run troupe config history agents.coder --theatre /tmp/demo
@@ -56,6 +57,32 @@ kill %1
 ```
 
 A `set` made while `watch` runs records exactly its own events. Its write-back is not picked up again.
+
+### Showing sections and where values come from
+
+`get` prints one value. `show` prints a value the same way. A mapping or list, or with `PATH` omitted the whole
+configuration, is printed as block YAML. Includes are resolved: an included YAML file appears in place of its
+`file:` string, and a text include's content is a literal block (`|`). The output is a canonical layout of the
+values, not a copy of your files: comments are dropped, `0x1F` shows as `31`, and quoting follows the same rule `set`
+uses for new values. With `--sources`, every line that holds a scalar ends with `# from <file>`, relative to the
+theatre:
+
+```sh
+mkdir -p /tmp/demo/.troupe/agents
+printf 'model: big\nprompt: file:coder.md\n' > /tmp/demo/.troupe/agents/coder.yaml
+printf 'You write code.\n' > /tmp/demo/.troupe/agents/coder.md
+printf 'name: demo\nagents:\n  coder: file:agents/coder.yaml\n' > /tmp/demo/.troupe/troupe.yml
+uv run troupe config show --sources --theatre /tmp/demo
+# name: demo # from .troupe/troupe.yml
+# agents:
+#   coder:
+#     model: big # from .troupe/agents/coder.yaml
+#     prompt: | # from .troupe/agents/coder.md
+#       You write code.
+```
+
+Until step 3, `show PATH` refused mappings and lists with exit 5. Scripts that relied on that should call `get`, whose
+output and exit codes are the same as the old `show PATH`.
 
 ### Includes
 
@@ -83,14 +110,14 @@ Change events are stored with the [`eventsourcing`](https://eventsourcing.readth
 
 Edits made by hand are recorded by *reconciling*: troupe compares the files with the recorded configuration and
 records a `set` or `remove` event for each leaf that differs. A formatting-only or comment-only edit records nothing.
-`show` and `set` reconcile before doing anything else, so edits made while nothing was running are picked up.
+`get`, `show` and `set` reconcile before doing anything else, so edits made while nothing was running are picked up.
 `history` never reconciles: it reports only what has been recorded. Commands against one theatre take turns (a lock
 on the `.troupe/` directory), so troupe never records its own write-back a second time.
 
 ## Decisions on points the contract leaves open
 
-These are recorded with their reasons in `openspec/changes/archive/2026-10-02-config-load-show-set/design.md`
-and `openspec/changes/archive/2026-10-03-config-sync-with-files/design.md`:
+These are recorded with their reasons in `openspec/changes/archive/2026-10-02-config-load-show-set/design.md`,
+`openspec/changes/archive/2026-10-03-config-sync-with-files/design.md` and the `config-get-and-show` design.md:
 
 1. Setting a key under a null or scalar value (e.g. `agents:` with nothing after it) exits 5. Set the parent to a
    mapping first: `set agents '{coder: {model: x}}'`.
@@ -114,6 +141,13 @@ and `openspec/changes/archive/2026-10-03-config-sync-with-files/design.md`:
 13. Reconcile records removes in the order they were recorded, then sets in the files' document order.
 14. `watch` reads the watched files every 0.2 s and reconciles once a change has read the same twice in a row. That
     way it does not record a file that an editor has emptied halfway through a save.
+15. `show PATH --sources` on a scalar prints it as YAML with the comment (`big # from …`), not in the
+    `get` form, so the source can be shown.
+16. The source comment is ` # from <file>`, on the `|` line for literal blocks. Lines holding `{}` or `[]` get none.
+    `<file>` has `..` folded away and symlinks are not resolved; a file outside the theatre gets a `../` path.
+17. `show` writes every multi-line string as a literal block when one can hold it exactly, otherwise double-quoted.
+    Lists under a key are indented two spaces, and list items that are collections use the compact `- key: v` form.
+18. `get` reconciles before reading, like `show`.
 
 ## Development
 
