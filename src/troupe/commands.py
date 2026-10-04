@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path as FsPath
 from typing import TextIO
 
+from troupe import lineage
 from troupe.edit.apply import compute_set
 from troupe.errors import LoadError, PathError
 from troupe.leaves import leaves
@@ -64,7 +65,7 @@ def theatre_session(
         if store is None:
             store = ConfigStore(state_dir(theatre))
         if not store.is_imported():
-            store.import_leaves(leaves(to_data(config.root)))
+            store.import_leaves(leaves(to_data(config.root)), lineage.for_import())
         if command in RECONCILING_COMMANDS:
             reconcile(config, store)
         yield config, store
@@ -113,21 +114,34 @@ def show(theatre: FsPath, path: Path | None, sources: bool) -> str:
     return render(node, theatre, sources=sources)
 
 
-def set_value(theatre: FsPath, path: Path, value: Data) -> None:
-    # The lock is held until the events are recorded, so no reconcile can see the written files first.
+def set_value(theatre: FsPath, path: Path, value: Data, actor: lineage.Actor, reason: str | None) -> None:
+    """Write `value` at `path` and record its events as one change by `actor`, through the CLI.
+
+    The lock is held until the events are recorded, so no reconcile can see the written files first.
+    """
     with theatre_session(theatre, "set") as (config, store):
         result = compute_set(theatre, config, path, value)
         for file, text in result.writes.items():
             with file.open("w", encoding="utf-8", newline="") as f:
                 f.write(text)
         if result.changes:
-            store.record(result.changes)
+            store.record(result.changes, lineage.for_cli(actor, reason))
 
 
 def _json_value(value: Scalar) -> Scalar:
     if isinstance(value, float) and not math.isfinite(value):
         return ".nan" if math.isnan(value) else (".inf" if value > 0 else "-.inf")
     return value
+
+
+def _lineage_fields(lin: lineage.Lineage) -> dict[str, object]:
+    return {
+        "actor": {"kind": lin.actor.kind, "id": lin.actor.id},
+        "via": lin.via,
+        "at": lin.at,
+        "reason": lin.reason,
+        "change": lin.change,
+    }
 
 
 def history(theatre: FsPath, path: Path | None) -> str:
@@ -145,6 +159,7 @@ def history(theatre: FsPath, path: Path | None) -> str:
             "path": c.path,
             "old": _json_value(c.old),
             "new": _json_value(c.new),
+            **_lineage_fields(record.lineage),
         }
         lines.append(json.dumps(obj, ensure_ascii=False, allow_nan=False) + "\n")
     return "".join(lines)

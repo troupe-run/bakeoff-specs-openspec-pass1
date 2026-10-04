@@ -10,6 +10,7 @@ from test_history import events
 
 from conftest import Theatre
 from troupe.leaves import leaves
+from troupe.lineage import for_import
 from troupe.loader import load
 from troupe.store import Change, ConfigStore
 from troupe.sync import reconcile
@@ -26,7 +27,7 @@ def imported(theatre: Path, text: str) -> ConfigStore:
     """A theatre whose files are `text`, imported into a fresh store."""
     write(theatre, text)
     store = ConfigStore(theatre / ".troupe")
-    store.import_leaves(leaves(to_data(load(theatre).root)))
+    store.import_leaves(leaves(to_data(load(theatre).root)), for_import())
     return store
 
 

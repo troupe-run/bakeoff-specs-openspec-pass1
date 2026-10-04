@@ -126,9 +126,9 @@ no size pressure, and one self-contained event per line matches the output.
   unknown actor (CLI events always have a known actor kind). So these are reported as `"file"`, the only value that
   pairs with an unknown actor.
 - `change`: `"legacy-import"` for every old `Imported` event (the import is known to be a single change), and
-  `"legacy-<originator_version>"` for each old `LeafSet`/`LeafRemoved`. Old batches cannot be reconstructed, so each
-  old event is reported as its own change rather than wrongly merged with others. These strings cannot collide
-  with UUID4 ids.
+  `"legacy-<seq>"` for each old `LeafSet`/`LeafRemoved`, numbered by the `seq` that `history` shows for it. Old
+  batches cannot be reconstructed, so each old event is reported as its own change rather than wrongly merged
+  with others. These strings cannot collide with UUID4 ids.
 
 Nothing is rewritten on disk. Upcasting happens on every read, so the store stays exactly as step 3 left it, plus
 new events. This is flagged for product-owner review below.
@@ -194,4 +194,4 @@ re-imports from the files on the next command, and history before that point is 
    (`file`) and its own (`cli`). The contract says a change identifies "the command (or file reconcile, or import)".
 6. `--reason` applies only to the `set`'s own events. An empty reason is stored as `""`, not `null`.
 7. Pre-step-4 events: actor unknown, `via` `"import"` or `"file"`, `at` from the stored event time, `change`
-   `legacy-import` or `legacy-<n>` (D7).
+   `legacy-import` or `legacy-<seq>` (D7).

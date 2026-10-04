@@ -9,6 +9,7 @@ from typing import NoReturn
 
 from troupe import commands
 from troupe.errors import TroupeError, UsageError
+from troupe.lineage import actor_from_env
 from troupe.paths import parse_path
 from troupe.values import parse_value
 
@@ -39,6 +40,7 @@ def _parser() -> argparse.ArgumentParser:
     set_ = sub.add_parser("set", parents=[theatre], help="change a setting and write it back")
     set_.add_argument("path")
     set_.add_argument("value")
+    set_.add_argument("--reason", metavar="TEXT", help="why the change is made (recorded in the history)")
     history = sub.add_parser("history", parents=[theatre], help="list configuration changes as JSON Lines")
     history.add_argument("path", nargs="?")
     sub.add_parser("watch", parents=[theatre], help="record hand edits to the files as they happen")
@@ -48,6 +50,8 @@ def _parser() -> argparse.ArgumentParser:
 def run(argv: Sequence[str]) -> str:
     """Run a command and return what it prints; raises TroupeError on failure."""
     args = _parser().parse_args(argv)
+    # Checked for every command, before anything is loaded, so a bad TROUPE_ACTOR records nothing.
+    actor = actor_from_env(os.environ)
     given: str | None = getattr(args, "theatre", None) or os.environ.get("TROUPE_THEATRE") or None
     theatre = Path(given or ".")
     if args.command == "get":
@@ -57,7 +61,7 @@ def run(argv: Sequence[str]) -> str:
         return commands.show(theatre, path, args.sources)
     if args.command == "set":
         path = parse_path(args.path)
-        commands.set_value(theatre, path, parse_value(args.value))
+        commands.set_value(theatre, path, parse_value(args.value), actor, args.reason)
         return ""
     if args.command == "watch":
         # Shown as given (not resolved, which would turn macOS /var/… into /private/var/…).
