@@ -1,0 +1,29 @@
+# Tasks
+
+## 1. Lineage values
+
+- [ ] 1.1 Add `src/troupe/lineage.py` (D1–D5): `Actor`, `UNKNOWN`, `Lineage`, `actor_from_env`, `login_name`, `now`, `new_change_id`, `for_import`, `for_file`, `for_cli`; verify `uv run mypy` and `uv run ruff check` are clean
+- [ ] 1.2 Add `tests/test_lineage_values.py`: `actor_from_env` for `human:alice`, `agent:planner-7`, `agent:claude:session-1`, unset (login name), and the invalid values `robot:x`, `alice`, `human:`, `Human:alice`, `""` (each `UsageError` whose message contains `TROUPE_ACTOR`); `login_name` returns `None` when `LOGNAME`/`USER`/`LNAME`/`USERNAME` are removed and `pwd.getpwuid` raises `KeyError`; `now()` matches the fixed format and is UTC under a non-UTC `TZ`; two `for_*` calls give different change ids; verify they pass and that breaking one rule (e.g. accepting an empty id) makes a test fail
+- [ ] 1.3 Add an autouse fixture in `tests/conftest.py` that removes `TROUPE_ACTOR` and sets `LOGNAME` and `USER` to a fixed test name, and make `tests/test_smoke.py`'s `troupe()` helper pass the same environment explicitly; verify `uv run pytest` still passes with `TROUPE_ACTOR=bogus` exported in the shell
+
+## 2. Storing lineage
+
+- [ ] 2.1 Before changing `store.py`, generate the pre-step-4 fixture (D9): in a temporary `git worktree` at `4ef5d76`, run that code with `uv run troupe config` on a theatre with `a: 1\n` (one `history`, then `set a 2`), and copy its `troupe.yml` and `events.sqlite` to `tests/fixtures/step3/`, recording the steps in `tests/fixtures/step3/README.md`; verify that `sqlite3` lists the two stored events with topics `troupe.store:TheatreConfig.Imported` and `…LeafSet`, then remove the worktree
+- [ ] 2.2 Change `store.py` (D6, D7): explicit version-2 `Imported`/`LeafSet`/`LeafRemoved` classes with the same names and the lineage attributes, `upcast_v1_v2` filling legacy lineage, `import_leaves(leaves, lineage)`, `record(changes, lineage)`, `Record.lineage`; verify `uv run mypy` is clean
+- [ ] 2.3 Update `tests/test_store.py` to pass lineages, and add tests that lineage round-trips through a new `ConfigStore` instance (including a null actor id, a null reason and an empty-string reason) and that all events of one `record` call share the lineage given; verify they pass
+- [ ] 2.4 Add `tests/test_lineage_legacy.py`: copy the fixture into a theatre, run `set a 9` with `TROUPE_ACTOR=human:alice`, and check the "A pre-lineage store" scenario (old events unknown actor, via `import`/`file`, change ids `legacy-import`/`legacy-<n>` and distinct, valid `at`; new event `human:alice`/`cli`; the fixture's projection still drives reconcile and old/new values); verify it passes, and fails if the upcaster is removed
+
+## 3. Recording lineage from commands
+
+- [ ] 3.1 Wire the write sites (D6): `theatre_session` imports with `for_import()`, `sync.reconcile` records with `for_file()`, `set_value(theatre, path, value, actor, reason)` records with `for_cli(...)`; in `cli.py` call `actor_from_env(os.environ)` after parsing for every subcommand, add `--reason TEXT` to `set`, and pass both to `set_value`; `history` prints `actor`, `via`, `at`, `reason`, `change` after the existing keys (D8); verify `uv run mypy` and `uv run ruff check` are clean
+- [ ] 3.2 Add `tests/test_lineage.py` through the real CLI for the config-lineage scenarios: fields of an imported event; timestamp is UTC and between two clock readings under `TZ=Asia/Tokyo`; agent, human, colon-id and login-fallback actors; invalid values exit 2 with stderr naming `TROUPE_ACTOR`, no file change and no event added; for `get`, `show`, `history` and `watch` as a first command, exit 2 and no `events.sqlite`; import ignores `TROUPE_ACTOR`; hand edit picked up by `set` is `unknown`/`file`, the `set`'s own event is `cli` with the actor; reason on every event of a multi-event set, `null` without `--reason`, not attached to reconciled edits, unicode multi-line reason on one line, empty reason stored as `""`; change grouping (one set, two sets, import, reconcile then set); lineage survives restarts and does not depend on the reader's `TROUPE_ACTOR`; verify they pass
+- [ ] 3.3 Add a `watch` lineage test to `tests/test_watch.py`: a live hand edit is recorded with actor `unknown` and via `file` while `watch` runs with `TROUPE_ACTOR=agent:w`, and a `set` made during `watch` is `cli` with its own actor; verify it passes
+- [ ] 3.4 Extend `tests/test_history.py` with "every line carries lineage" (all ten keys, with and without `PATH`, filtered lines keep their lineage), and `tests/test_cli.py` with the `set --reason` placement scenarios and `set model b --reason` (no TEXT) exiting 2; verify they pass
+- [ ] 3.5 Add a smoke test through `uv run troupe config` that runs `set` with `TROUPE_ACTOR=agent:smoke` and `--reason`, then `history` in a separate process, and checks the lineage; verify it passes
+- [ ] 3.6 Update README: `set PATH VALUE [--reason TEXT]` in the commands table, a "Lineage" section (the five fields, `TROUPE_ACTOR` and the login fallback, imports and hand edits as `unknown`, change grouping including reconcile-then-set, pre-step-4 stores, rollback note), an example `history` line, `history` described as printing lineage, `lineage.py` in the code map, and the design.md decisions appended to the decisions list with this change's design.md added to the referenced files; verify each new README command runs as written against `/tmp/demo`
+
+## 4. Integration
+
+- [ ] 4.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`; verify all are clean and show the output
+- [ ] 4.2 Run `openspec validate config-lineage --strict`; verify it reports the change as valid
+- [ ] 4.3 Commit the work on `main` in small steps with messages that say why (no push, no PR); verify `git status` is clean and `git log` shows the commits
