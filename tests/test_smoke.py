@@ -128,6 +128,29 @@ def test_exit_codes_through_uv_run(theatre: Path, args: tuple[str, ...], code: i
     assert r.stderr
 
 
+def test_lineage_through_uv_run_survives_between_processes(theatre: Path) -> None:
+    r = troupe(
+        theatre, "set", "agents.coder.model", "small", "--reason", "cheaper", TROUPE_ACTOR="agent:smoke"
+    )
+    assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
+    r = troupe(theatre, "history", "agents.coder.model", TROUPE_ACTOR="human:auditor")
+    imported, changed = (json.loads(line) for line in r.stdout.splitlines())
+    assert (imported["actor"], imported["via"]) == ({"kind": "unknown", "id": None}, "import")
+    assert (changed["new"], changed["actor"], changed["via"], changed["reason"]) == (
+        "small",
+        {"kind": "agent", "id": "smoke"},
+        "cli",
+        "cheaper",
+    )
+    assert changed["at"].endswith("Z") and changed["change"] != imported["change"]
+
+
+def test_invalid_actor_exits_2_through_uv_run(theatre: Path) -> None:
+    r = troupe(theatre, "set", "name", "x", TROUPE_ACTOR="robot:x")
+    assert (r.returncode, r.stdout) == (2, "")
+    assert "TROUPE_ACTOR" in r.stderr
+
+
 def test_missing_config_exits_4_through_uv_run(tmp_path: Path) -> None:
     r = troupe(tmp_path, "history")
     assert (r.returncode, r.stdout) == (4, "")

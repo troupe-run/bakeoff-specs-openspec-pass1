@@ -125,3 +125,18 @@ def test_usage_error_creates_no_state(make: Callable[[str], Theatre]) -> None:
     assert t.run("show", "a..b").code == 2
     assert t.run("set", "a", "[x").code == 2
     assert not (t.dir / "events.sqlite").exists()
+
+
+HISTORY_KEYS = ["seq", "op", "path", "old", "new", "actor", "via", "at", "reason", "change"]
+
+
+def test_every_history_line_carries_lineage_with_or_without_a_path(make: Callable[[str], Theatre]) -> None:
+    t = make("a: 1\nb: 1\n")
+    t.run("history")
+    t.write("troupe.yml", "a: 2\nb: 1\n")
+    assert t.run("set", "b", "3", "--reason", "r").code == 0
+    everything = events(t.run("history"))
+    assert [e["via"] for e in everything] == ["import", "import", "file", "cli"]
+    assert all(list(e) == HISTORY_KEYS for e in everything)
+    filtered = events(t.run("history", "b"))
+    assert filtered == [e for e in everything if e["path"] == "b"]

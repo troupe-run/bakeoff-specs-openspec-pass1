@@ -237,6 +237,24 @@ def test_set_while_watch_runs_adds_exactly_its_own_event(
     assert brief(theatre) == [("import", "model", None, "a"), ("set", "model", "a", "b")]
 
 
+def test_watch_records_hand_edits_as_unknown_file_and_a_concurrent_set_as_its_own_actor(
+    theatre: Theatre, watching: Callable[[], Watch], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    theatre.write("troupe.yml", "a: 1\nb: 1\n")
+    monkeypatch.setenv("TROUPE_ACTOR", "agent:w")  # watch's own actor must not be given to hand edits
+    watching()
+    start = time.monotonic()
+    theatre.write("troupe.yml", "a: 2\nb: 1\n")
+    recorded_within(theatre, 2, [("set", "a", 1, 2)], start)
+    monkeypatch.setenv("TROUPE_ACTOR", "human:setter")
+    assert theatre.run("set", "b", "5").code == 0
+    lines = events(theatre.run("history"))[2:]
+    assert [(e["path"], e["actor"], e["via"]) for e in lines] == [
+        ("a", {"kind": "unknown", "id": None}, "file"),
+        ("b", {"kind": "human", "id": "setter"}, "cli"),
+    ]
+
+
 def test_set_into_an_included_file_while_watch_runs_adds_exactly_its_own_event(
     theatre: Theatre, watching: Callable[[], Watch]
 ) -> None:
