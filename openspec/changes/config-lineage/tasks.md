@@ -20,10 +20,10 @@
 - [x] 3.3 Add a `watch` lineage test to `tests/test_watch.py`: a live hand edit is recorded with actor `unknown` and via `file` while `watch` runs with `TROUPE_ACTOR=agent:w`, and a `set` made during `watch` is `cli` with its own actor; verify it passes
 - [x] 3.4 Extend `tests/test_history.py` with "every line carries lineage" (all ten keys, with and without `PATH`, filtered lines keep their lineage), and `tests/test_cli.py` with the `set --reason` placement scenarios and `set model b --reason` (no TEXT) exiting 2; verify they pass
 - [x] 3.5 Add a smoke test through `uv run troupe config` that runs `set` with `TROUPE_ACTOR=agent:smoke` and `--reason`, then `history` in a separate process, and checks the lineage; verify it passes
-- [ ] 3.6 Update README: `set PATH VALUE [--reason TEXT]` in the commands table, a "Lineage" section (the five fields, `TROUPE_ACTOR` and the login fallback, imports and hand edits as `unknown`, change grouping including reconcile-then-set, pre-step-4 stores, rollback note), an example `history` line, `history` described as printing lineage, `lineage.py` in the code map, and the design.md decisions appended to the decisions list with this change's design.md added to the referenced files; verify each new README command runs as written against `/tmp/demo`
+- [x] 3.6 Update README: `set PATH VALUE [--reason TEXT]` in the commands table, a "Lineage" section (the five fields, `TROUPE_ACTOR` and the login fallback, imports and hand edits as `unknown`, change grouping including reconcile-then-set, pre-step-4 stores, rollback note), an example `history` line, `history` described as printing lineage, `lineage.py` in the code map, and the design.md decisions appended to the decisions list with this change's design.md added to the referenced files; verify each new README command runs as written against `/tmp/demo`
 
 ## 4. Integration
 
-- [ ] 4.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`; verify all are clean and show the output
-- [ ] 4.2 Run `openspec validate config-lineage --strict`; verify it reports the change as valid
-- [ ] 4.3 Commit the work on `main` in small steps with messages that say why (no push, no PR); verify `git status` is clean and `git log` shows the commits
+- [x] 4.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`; verify all are clean and show the output
+- [x] 4.2 Run `openspec validate config-lineage --strict`; verify it reports the change as valid
+- [x] 4.3 Commit the work on `main` in small steps with messages that say why (no push, no PR); verify `git status` is clean and `git log` shows the commits

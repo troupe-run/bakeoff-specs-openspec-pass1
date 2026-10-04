@@ -22,8 +22,8 @@ Every command takes `--theatre DIR` (default: the current directory).
 |---|---|
 | `troupe config get PATH` | Print the scalar at `PATH` (a mapping or list exits 5: use `show`) |
 | `troupe config show [PATH] [--sources]` | Print the value at `PATH`, or the whole configuration, as YAML with includes resolved; `--sources` says which file each value comes from |
-| `troupe config set PATH VALUE` | Change or create the value at `PATH` and write it back into the file that holds it |
-| `troupe config history [PATH]` | Print the change events as JSON Lines, oldest first, optionally only for `PATH` and below |
+| `troupe config set PATH VALUE [--reason TEXT]` | Change or create the value at `PATH` and write it back into the file that holds it; `--reason` is recorded in the history |
+| `troupe config history [PATH]` | Print the change events with their [lineage](#lineage) as JSON Lines, oldest first, optionally only for `PATH` and below |
 | `troupe config watch` | Record hand edits to the files as they happen, until Ctrl-C (SIGINT) or SIGTERM |
 
 `PATH` is dotted (`agents.coder.model`); a numeric segment indexes a list (`tools.0`). `VALUE` is one YAML 1.2 flow
@@ -37,7 +37,7 @@ mkdir -p /tmp/demo/.troupe
 printf 'agents:\n  coder:\n    model: big   # strongest\n' > /tmp/demo/.troupe/troupe.yml
 uv run troupe config get agents.coder.model --theatre /tmp/demo         # big
 uv run troupe config set agents.coder.model small --theatre /tmp/demo   # model: small # strongest
-uv run troupe config set agents.coder.tools '[read, write]' --theatre /tmp/demo
+uv run troupe config set agents.coder.tools '[read, write]' --reason "coder needs files" --theatre /tmp/demo
 uv run troupe config history agents.coder --theatre /tmp/demo
 ```
 
@@ -84,6 +84,42 @@ uv run troupe config show --sources --theatre /tmp/demo
 Until step 3, `show PATH` refused mappings and lists with exit 5. Scripts that relied on that should call `get`, whose
 output and exit codes are the same as the old `show PATH`.
 
+### Lineage
+
+Every history event says who made the change, how, when, why, and what else changed with it:
+
+```sh
+TROUPE_ACTOR=agent:planner-7 uv run troupe config set agents.coder.model huge --reason "harder tasks" --theatre /tmp/demo
+uv run troupe config history agents.coder.model --theatre /tmp/demo | tail -1
+# {"seq": …, "op": "set", "path": "agents.coder.model", "old": "big", "new": "huge",
+#  "actor": {"kind": "agent", "id": "planner-7"}, "via": "cli", "at": "2026-10-04T09:15:02.481233Z",
+#  "reason": "harder tasks", "change": "3f0c…"}      (one line in the real output)
+```
+
+| Field | Meaning |
+|---|---|
+| `actor` | `{"kind": "human" \| "agent" \| "unknown", "id": …}`: who made the change |
+| `via` | `"cli"` (a `set`), `"file"` (a hand edit, picked up by reconciling) or `"import"` (the first command) |
+| `at` | when the change was recorded: RFC 3339 UTC, always six fractional digits and a trailing `Z` |
+| `reason` | the text given with `set --reason TEXT` (kept exactly, even if empty), else `null` |
+| `change` | an id shared by every event of one change and by no other event |
+
+The actor of a `set` comes from `TROUPE_ACTOR`: `human:<id>` or `agent:<id>` (the id is everything after the first
+`:`). When the variable is unset, the actor is the human logged in (`{"kind": "human", "id": "<login name>"}`, or
+`null` for the id if no login name can be found). Any other value, including an empty one, makes every command exit 2
+before it reads or records anything. `TROUPE_ACTOR` records a claim, not a proof: it is not access control.
+
+troupe cannot know who edited a file or who wrote the configuration before the import, so those events always have
+actor `{"kind": "unknown", "id": null}`, whatever `TROUPE_ACTOR` says. A `set` that first picks up hand edits
+therefore records two changes: the hand edits (`file`, unknown actor, no reason) and its own (`cli`). Each `watch`
+reconcile is one change.
+
+Event stores written before lineage (step 3) keep working and are not rewritten. Their events are shown with actor
+`unknown`, `at` the time they were stored, reason `null`, via `import` or `file` (step 3 did not record which `set`
+events came from the command line), and change `legacy-import` (all old imports) or `legacy-<seq>` (each other old
+event). Going back to step-3 code after lineage events exist means deleting `.troupe/events.sqlite`. troupe then
+imports the files again, and the earlier history is lost.
+
 ### Includes
 
 A string starting with `file:` includes the named file, relative to the file containing it. A `.yml`/`.yaml` target is
@@ -96,7 +132,7 @@ whole YAML include is refused.
 | Code | Meaning |
 |---|---|
 | 0 | success |
-| 2 | usage error (bad arguments, path syntax or VALUE) |
+| 2 | usage error (bad arguments, path syntax, VALUE or `TROUPE_ACTOR`) |
 | 3 | write refused, so no file changed |
 | 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, include cycle) |
 | 5 | path not found, or the wrong kind of node for the command |
@@ -117,7 +153,8 @@ on the `.troupe/` directory), so troupe never records its own write-back a secon
 ## Decisions on points the contract leaves open
 
 These are recorded with their reasons in `openspec/changes/archive/2026-10-02-config-load-show-set/design.md`,
-`openspec/changes/archive/2026-10-03-config-sync-with-files/design.md` and `openspec/changes/archive/2026-10-03-config-get-and-show/design.md`:
+`openspec/changes/archive/2026-10-03-config-sync-with-files/design.md`, `openspec/changes/archive/2026-10-03-config-get-and-show/design.md`
+and `openspec/changes/config-lineage/design.md`:
 
 1. Setting a key under a null or scalar value (e.g. `agents:` with nothing after it) exits 5. Set the parent to a
    mapping first: `set agents '{coder: {model: x}}'`.
@@ -148,6 +185,16 @@ These are recorded with their reasons in `openspec/changes/archive/2026-10-02-co
 17. `show` writes every multi-line string as a literal block when one can hold it exactly, otherwise double-quoted.
     Lists under a key are indented two spaces, and list items that are collections use the compact `- key: v` form.
 18. `get` reconciles before reading, like `show`.
+19. An invalid `TROUPE_ACTOR` is refused by every command, not only `set`, before anything is stored.
+20. An empty `TROUPE_ACTOR` is invalid, not "unset". Kinds are lowercase only. The id is kept exactly and may contain
+    `:`.
+21. With no login name to be found, the actor is `{"kind": "human", "id": null}`.
+22. `at` has microsecond precision, and every event of one change has the same `at`.
+23. Change ids are random UUIDs. A `set` that picks up hand edits first records two changes (the hand edits', then
+    its own).
+24. `--reason` applies only to the `set`'s own events. An empty reason is stored as `""`.
+25. Events from before lineage: actor unknown, via `import` or `file`, `at` from when they were stored, change
+    `legacy-import` or `legacy-<seq>`.
 
 ## Development
 
@@ -158,7 +205,7 @@ uv run ruff check && uv run ruff format --check
 ```
 
 Code map: `src/troupe/loader.py` (files and includes), `tree.py` (YAML nodes with source positions), `schema.py`
-(core-schema types and printing), `store.py` (event store), `edit/` (byte-surgical write-back:
-`plan.py` → `ops.py` → `apply.py`, with `scalars.py`, `blocks.py`, `folded.py` and `text.py` holding the quoting,
-block-scalar, folding and layout rules), `sync.py` (reconcile), `commands.py` (subcommands, the theatre lock
-and the `watch` loop) and `cli.py`.
+(core-schema types and printing), `lineage.py` (actors, timestamps and change ids), `store.py` (event store),
+`edit/` (byte-surgical write-back: `plan.py` → `ops.py` → `apply.py`, with `scalars.py`, `blocks.py`, `folded.py`
+and `text.py` holding the quoting, block-scalar, folding and layout rules), `sync.py` (reconcile), `commands.py`
+(subcommands, the theatre lock and the `watch` loop) and `cli.py`.
