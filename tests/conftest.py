@@ -45,6 +45,17 @@ class Theatre:
         }
 
 
+TEST_LOGIN = "test-login"
+
+
+@pytest.fixture(autouse=True)
+def _known_actor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The developer's own TROUPE_ACTOR and login name must not change what the tests see."""
+    monkeypatch.delenv("TROUPE_ACTOR", raising=False)
+    monkeypatch.setenv("LOGNAME", TEST_LOGIN)
+    monkeypatch.setenv("USER", TEST_LOGIN)
+
+
 @pytest.fixture
 def run(capsys: pytest.CaptureFixture[str]) -> Callable[..., Result]:
     def _run(*args: str) -> Result:

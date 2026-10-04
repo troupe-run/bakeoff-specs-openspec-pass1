@@ -1,6 +1,7 @@
 """End-to-end: the real `uv run troupe config …` command from the repository root."""
 
 import json
+import os
 import selectors
 import shutil
 import signal
@@ -23,12 +24,14 @@ class Run:
     stderr: str
 
 
-def troupe(theatre: Path, *args: str) -> Run:
+def troupe(theatre: Path, *args: str, **env: str) -> Run:
+    """Run troupe with the test environment (conftest's known actor), plus `env`."""
     r = subprocess.run(
         ["uv", "run", "--quiet", "troupe", "config", *args, "--theatre", str(theatre)],
         cwd=REPO,
         capture_output=True,
         check=False,
+        env={**os.environ, **env},
     )
     return Run(r.returncode, r.stdout.decode("utf-8"), r.stderr.decode("utf-8"))
 

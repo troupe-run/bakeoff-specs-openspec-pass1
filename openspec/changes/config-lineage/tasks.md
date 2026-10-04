@@ -2,9 +2,9 @@
 
 ## 1. Lineage values
 
-- [ ] 1.1 Add `src/troupe/lineage.py` (D1–D5): `Actor`, `UNKNOWN`, `Lineage`, `actor_from_env`, `login_name`, `now`, `new_change_id`, `for_import`, `for_file`, `for_cli`; verify `uv run mypy` and `uv run ruff check` are clean
-- [ ] 1.2 Add `tests/test_lineage_values.py`: `actor_from_env` for `human:alice`, `agent:planner-7`, `agent:claude:session-1`, unset (login name), and the invalid values `robot:x`, `alice`, `human:`, `Human:alice`, `""` (each `UsageError` whose message contains `TROUPE_ACTOR`); `login_name` returns `None` when `LOGNAME`/`USER`/`LNAME`/`USERNAME` are removed and `pwd.getpwuid` raises `KeyError`; `now()` matches the fixed format and is UTC under a non-UTC `TZ`; two `for_*` calls give different change ids; verify they pass and that breaking one rule (e.g. accepting an empty id) makes a test fail
-- [ ] 1.3 Add an autouse fixture in `tests/conftest.py` that removes `TROUPE_ACTOR` and sets `LOGNAME` and `USER` to a fixed test name, and make `tests/test_smoke.py`'s `troupe()` helper pass the same environment explicitly; verify `uv run pytest` still passes with `TROUPE_ACTOR=bogus` exported in the shell
+- [x] 1.1 Add `src/troupe/lineage.py` (D1–D5): `Actor`, `UNKNOWN`, `Lineage`, `actor_from_env`, `login_name`, `now`, `new_change_id`, `for_import`, `for_file`, `for_cli`; verify `uv run mypy` and `uv run ruff check` are clean
+- [x] 1.2 Add `tests/test_lineage_values.py`: `actor_from_env` for `human:alice`, `agent:planner-7`, `agent:claude:session-1`, unset (login name), and the invalid values `robot:x`, `alice`, `human:`, `Human:alice`, `""` (each `UsageError` whose message contains `TROUPE_ACTOR`); `login_name` returns `None` when `LOGNAME`/`USER`/`LNAME`/`USERNAME` are removed and `pwd.getpwuid` raises `KeyError`; `now()` matches the fixed format and is UTC under a non-UTC `TZ`; two `for_*` calls give different change ids; verify they pass and that breaking one rule (e.g. accepting an empty id) makes a test fail
+- [x] 1.3 Add an autouse fixture in `tests/conftest.py` that removes `TROUPE_ACTOR` and sets `LOGNAME` and `USER` to a fixed test name, and make `tests/test_smoke.py`'s `troupe()` helper pass the same environment explicitly; verify `uv run pytest` still passes with `TROUPE_ACTOR=bogus` exported in the shell
 
 ## 2. Storing lineage
 
