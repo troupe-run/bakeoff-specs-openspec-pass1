@@ -9,8 +9,8 @@ scalars are printed, and how failures are reported through exit codes and messag
 
 ### Requirement: Invocation and theatre selection
 The CLI SHALL be invocable as `uv run troupe config <subcommand> [--theatre <dir>] [arguments]` from the repository
-root, with subcommands `get PATH`, `show [PATH] [--sources]`, `set PATH VALUE`, `history [PATH]` and `watch`.
-`--theatre` SHALL default to the current working directory.
+root, with subcommands `get PATH`, `show [PATH] [--sources]`, `set PATH VALUE [--reason TEXT]`, `history [PATH]` and
+`watch`. `--theatre` SHALL default to the current working directory.
 
 #### Scenario: Explicit theatre
 - **WHEN** `uv run troupe config get model --theatre /tmp/t` is run and `/tmp/t/.troupe/troupe.yml` contains `model: x`
@@ -21,12 +21,16 @@ root, with subcommands `get PATH`, `show [PATH] [--sources]`, `set PATH VALUE`, 
 - **THEN** stdout is `x\n` and the exit code is 0
 
 #### Scenario: Unknown subcommand or missing argument
-- **WHEN** `troupe config frobnicate`, `troupe config get` (no PATH) or `troupe config set model` (no VALUE) is run
+- **WHEN** `troupe config frobnicate`, `troupe config get` (no PATH), `troupe config set model` (no VALUE) or `troupe config set model b --reason` (no TEXT) is run
 - **THEN** the exit code is 2, stdout is empty and stderr has a usage message
 
 #### Scenario: show takes an optional PATH
 - **WHEN** `troupe config show` and `troupe config show --sources` are run against a theatre that loads
 - **THEN** each exits 0 and prints the whole configuration
+
+#### Scenario: set takes an optional reason
+- **WHEN** `troupe config set model b --reason "why"` and `troupe config set --reason "why" model c` are run against a theatre that loads
+- **THEN** each exits 0 and changes `model`
 
 #### Scenario: watch takes no positional argument
 - **WHEN** `troupe config watch extra` is run
