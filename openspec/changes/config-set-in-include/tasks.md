@@ -15,6 +15,6 @@
 
 ## 3. Integration
 
-- [ ] 3.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`; verify all are clean and show the output
-- [ ] 3.2 Run `openspec validate config-set-in-include --strict`; verify it reports the change as valid
-- [ ] 3.3 Commit the work on `main` in small steps with messages that say why (no push, no PR), archiving `config-include-overrides` before this change; verify `git status` is clean and `git log` shows the commits
+- [x] 3.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`; verify all are clean and show the output
+- [x] 3.2 Run `openspec validate config-set-in-include --strict`; verify it reports the change as valid
+- [x] 3.3 Commit the work on `main` in small steps with messages that say why (no push, no PR), archiving `config-include-overrides` before this change; verify `git status` is clean and `git log` shows the commits
