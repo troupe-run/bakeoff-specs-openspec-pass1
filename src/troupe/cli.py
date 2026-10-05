@@ -41,6 +41,11 @@ def _parser() -> argparse.ArgumentParser:
     set_.add_argument("path")
     set_.add_argument("value")
     set_.add_argument("--reason", metavar="TEXT", help="why the change is made (recorded in the history)")
+    set_.add_argument(
+        "--in-include",
+        action="store_true",
+        help="write new keys into the included file itself, not as overrides in the including file",
+    )
     history = sub.add_parser("history", parents=[theatre], help="list configuration changes as JSON Lines")
     history.add_argument("path", nargs="?")
     sub.add_parser("watch", parents=[theatre], help="record hand edits to the files as they happen")
@@ -61,7 +66,9 @@ def run(argv: Sequence[str]) -> str:
         return commands.show(theatre, path, args.sources)
     if args.command == "set":
         path = parse_path(args.path)
-        commands.set_value(theatre, path, parse_value(args.value), actor, args.reason)
+        commands.set_value(
+            theatre, path, parse_value(args.value), actor, args.reason, in_include=args.in_include
+        )
         return ""
     if args.command == "watch":
         # Shown as given (not resolved, which would turn macOS /var/… into /private/var/…).

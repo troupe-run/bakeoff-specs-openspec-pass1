@@ -28,8 +28,10 @@ class SetResult:
     changes: list[Change]
 
 
-def compute_set(theatre: FsPath, config: Config, path: Path, value: Data) -> SetResult:
-    operations = plan(config.root, path, value)
+def compute_set(
+    theatre: FsPath, config: Config, path: Path, value: Data, *, in_include: bool = False
+) -> SetResult:
+    operations = plan(config.root, path, value, in_include=in_include)
     original = {key: src.text for key, src in config.files.items()}
     texts = dict(original)
     current = config
@@ -72,8 +74,8 @@ def _edits(root: Node, op: Op, where: str) -> list[prim.FileEdits]:
     parent = _node_at(root, op.path[:-1])
     key = op.path[-1]
     if isinstance(op, AddKey):
-        assert isinstance(parent, MappingNode) and not parent.layers, where
-        return [prim.add_key(parent, key, op.value)]
+        assert isinstance(parent, MappingNode), where
+        return [prim.add_key(physical_mapping(parent), key, op.value)]
     if isinstance(op, Append):
         assert isinstance(parent, SequenceNode)
         return [prim.append_item(parent, op.value)]
@@ -159,6 +161,16 @@ def _add_override(root: Node, op: AddOverride) -> prim.FileEdits:
 def to_crlf(text: str) -> str:
     """Text-include content for a CRLF target: every LF not already preceded by CR becomes CRLF."""
     return re.sub(r"(?<!\r)\n", "\r\n", text)
+
+
+def physical_mapping(node: MappingNode) -> MappingNode:
+    """The mapping as written that a new key of `node` goes into.
+
+    For a merged mapping that is the innermost included one (only `set --in-include` adds keys there).
+    """
+    mapping = node.layers[0] if node.layers else node
+    assert not mapping.layers
+    return mapping
 
 
 def _slot(parent: Node, key: str) -> prim.Slot:

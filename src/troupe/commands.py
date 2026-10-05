@@ -114,13 +114,21 @@ def show(theatre: FsPath, path: Path | None, sources: bool) -> str:
     return render(node, theatre, sources=sources)
 
 
-def set_value(theatre: FsPath, path: Path, value: Data, actor: lineage.Actor, reason: str | None) -> None:
+def set_value(
+    theatre: FsPath,
+    path: Path,
+    value: Data,
+    actor: lineage.Actor,
+    reason: str | None,
+    *,
+    in_include: bool = False,
+) -> None:
     """Write `value` at `path` and record its events as one change by `actor`, through the CLI.
 
     The lock is held until the events are recorded, so no reconcile can see the written files first.
     """
     with theatre_session(theatre, "set") as (config, store):
-        result = compute_set(theatre, config, path, value)
+        result = compute_set(theatre, config, path, value, in_include=in_include)
         for file, text in result.writes.items():
             with file.open("w", encoding="utf-8", newline="") as f:
                 f.write(text)

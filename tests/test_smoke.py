@@ -221,3 +221,15 @@ def test_new_key_under_an_include_becomes_an_override_end_to_end(theatre: Path) 
         'prompt: "You write code.\\r\\nBe brief.\\r\\n" # from .troupe/agents/coder.md\n'
         "temperature: 0.3 # from .troupe/troupe.yml\n"
     )
+
+
+def test_in_include_writes_into_the_shared_file_end_to_end(theatre: Path) -> None:
+    d = theatre / ".troupe"
+    config_before = (d / "troupe.yml").read_bytes()
+    r = troupe(theatre, "set", "agents.coder.temperature", "0.3", "--in-include")
+    assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
+    assert (d / "troupe.yml").read_bytes() == config_before
+    assert (d / "agents" / "coder.yaml").read_bytes() == (
+        b"model: big  # strongest\nprompt: file:coder.md\ntemperature: 0.3\n"
+    )
+    assert troupe(theatre, "get", "agents.coder.temperature").stdout == "0.3\n"

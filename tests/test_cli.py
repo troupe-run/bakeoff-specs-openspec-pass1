@@ -47,6 +47,8 @@ def test_theatre_option_may_come_before_the_subcommand(
         ("get", "a", "--sources"),
         ("set", "model", "b", "--reason"),
         ("get", "model", "--reason", "x"),
+        ("set", "model", "b", "--in-include", "x"),
+        ("get", "model", "--in-include"),
     ],
 )
 def test_bad_command_lines_exit_2_with_empty_stdout(
@@ -68,6 +70,23 @@ def test_set_takes_an_optional_reason_before_or_after_path_and_value(
     r = t.run(*args)
     assert (r.code, r.out, r.err) == (0, "", "")
     assert t.read("troupe.yml") == "model: b\n"
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("set", "a.x", "1", "--in-include"),
+        ("set", "--in-include", "a.x", "1", "--reason", "why"),
+        ("set", "--reason", "why", "a.x", "1", "--in-include"),
+    ],
+)
+def test_set_takes_an_optional_in_include_anywhere(
+    make: Callable[[str], Theatre], args: tuple[str, ...]
+) -> None:
+    t = make("a:\n  b: 1\n")
+    r = t.run(*args)
+    assert (r.code, r.out, r.err) == (0, "", "")
+    assert t.read("troupe.yml") == "a:\n  b: 1\n  x: 1\n"
 
 
 @pytest.mark.parametrize("args", [("show",), ("show", "--sources")])

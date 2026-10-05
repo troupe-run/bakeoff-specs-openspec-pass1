@@ -63,7 +63,7 @@ def describe(node: Node) -> str:
     )
 
 
-def plan(root: Node, path: Path, value: Data) -> list[Op]:
+def plan(root: Node, path: Path, value: Data, *, in_include: bool = False) -> list[Op]:
     """Operations that make the value at `path` equal `value`. Raises PathError / WriteRefused."""
     node: Node = root
     for i, segment in enumerate(path):
@@ -74,7 +74,7 @@ def plan(root: Node, path: Path, value: Data) -> list[Op]:
             if entry is None:
                 if any(is_index(s) for s in path[i:]):
                     raise PathError(f"{format_path(path)}: not found ({format_path(here)} does not exist)")
-                return [new_key_target(root, here, nest(rest, value))]
+                return [new_key_target(root, here, nest(rest, value), in_include=in_include)]
             node = entry.value
         elif isinstance(node, SequenceNode):
             if not is_index(segment):
@@ -93,17 +93,20 @@ def plan(root: Node, path: Path, value: Data) -> list[Op]:
                 f"{format_path(path)}: {format_path(path[:i])} is a scalar, not a mapping or list"
             )
     ops: list[Op] = []
-    _diff(root, node, value, path, ops)
+    _diff(root, node, value, path, ops, in_include)
     return ops
 
 
-def new_key_target(root: Node, path: Path, value: Data) -> Op:
+def new_key_target(root: Node, path: Path, value: Data, *, in_include: bool = False) -> Op:
     """Where the new key at `path` (whose parent mapping exists) is written.
 
     A key whose parent lies inside an included value, with no list item between the include and the
     parent, is written as an override of the nearest such include, in the file that holds the include's
-    reference. Anything else goes into the parent mapping's own file.
+    reference. Anything else, and every key when `in_include` is set (`set --in-include`), goes into the
+    parent mapping's own file: for a merged mapping, the innermost included one.
     """
+    if in_include:
+        return AddKey(path, value)
     anchor: int | None = 0 if root.include is not None else None  # length of the anchoring include's path
     node = root
     for depth, segment in enumerate(path[:-1], start=1):
@@ -141,7 +144,7 @@ def _check_no_includes(node: Node, path: Path) -> None:
             _check_no_includes(item.value, (*path, str(index)))
 
 
-def _diff(root: Node, node: Node, value: Data, path: Path, ops: list[Op]) -> None:
+def _diff(root: Node, node: Node, value: Data, path: Path, ops: list[Op], in_include: bool) -> None:
     where = format_path(path)
     include = node.include
     if include is not None and is_bare(include, value):
@@ -166,14 +169,14 @@ def _diff(root: Node, node: Node, value: Data, path: Path, ops: list[Op]) -> Non
         for key, child in value.items():
             existing = node.get(key)
             if existing is None:
-                adds.append(new_key_target(root, (*path, key), child))
+                adds.append(new_key_target(root, (*path, key), child, in_include=in_include))
             else:
-                _diff(root, existing.value, child, (*path, key), ops)
+                _diff(root, existing.value, child, (*path, key), ops, in_include)
         ops.extend(adds + deletes)
         return
     if isinstance(node, SequenceNode) and isinstance(value, list) and (value or not node.items):
         for index, (item, child) in enumerate(zip(node.items, value, strict=False)):
-            _diff(root, item.value, child, (*path, str(index)), ops)
+            _diff(root, item.value, child, (*path, str(index)), ops, in_include)
         for index in range(len(node.items), len(value)):
             ops.append(Append((*path, str(index)), value[index]))
         for index in reversed(range(len(value), len(node.items))):
