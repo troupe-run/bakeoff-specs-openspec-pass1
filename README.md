@@ -22,7 +22,7 @@ Every command takes `--theatre DIR` (default: the current directory).
 |---|---|
 | `troupe config get PATH` | Print the scalar at `PATH` (a mapping or list exits 5: use `show`) |
 | `troupe config show [PATH] [--sources]` | Print the value at `PATH`, or the whole configuration, as YAML with includes resolved; `--sources` says which file each value comes from |
-| `troupe config set PATH VALUE [--reason TEXT]` | Change or create the value at `PATH` and write it back into the file that holds it; `--reason` is recorded in the history |
+| `troupe config set PATH VALUE [--reason TEXT] [--in-include]` | Change or create the value at `PATH` and write it back into the file that holds it; `--reason` is recorded in the history; `--in-include` puts new keys into the included (shared) file instead of an override |
 | `troupe config history [PATH]` | Print the change events with their [lineage](#lineage) as JSON Lines, oldest first, optionally only for `PATH` and below |
 | `troupe config watch` | Record hand edits to the files as they happen, until Ctrl-C (SIGINT) or SIGTERM |
 
@@ -171,6 +171,18 @@ uv run troupe config show agents.coder --sources --theatre /tmp/demo
 # temperature: 0.3 # from .troupe/troupe.yml
 ```
 
+When a new setting really belongs in the shared file, for every theatre that includes it, say so with
+`--in-include`. New keys then go into the file that holds their deepest existing section (the included file, or the
+innermost one with nested includes) and no override is written. Only new keys are affected: existing values,
+appends and deletes go where they would without the flag.
+
+```sh
+uv run troupe config set agents.coder.top_p 0.9 --in-include --theatre /tmp/demo
+cat /tmp/demo/.troupe/agents/coder.yaml
+# model: big
+# top_p: 0.9
+```
+
 Mapping-form includes need step 5 or later. Older code reads `$ref` as an ordinary key, so going back means
 rewriting them as one-line includes (and moving the overrides into the shared file) by hand.
 
@@ -201,7 +213,8 @@ on the `.troupe/` directory), so troupe never records its own write-back a secon
 
 These are recorded with their reasons in `openspec/changes/archive/2026-10-02-config-load-show-set/design.md`,
 `openspec/changes/archive/2026-10-03-config-sync-with-files/design.md`, `openspec/changes/archive/2026-10-03-config-get-and-show/design.md`,
-`openspec/changes/archive/2026-10-04-config-lineage/design.md` and `openspec/changes/archive/2026-10-05-config-include-overrides/design.md`:
+`openspec/changes/archive/2026-10-04-config-lineage/design.md`, `openspec/changes/archive/2026-10-05-config-include-overrides/design.md`
+and `openspec/changes/config-set-in-include/design.md`:
 
 1. Setting a key under a null or scalar value (e.g. `agents:` with nothing after it) exits 5. Set the parent to a
    mapping first: `set agents '{coder: {model: x}}'`.
@@ -259,6 +272,16 @@ These are recorded with their reasons in `openspec/changes/archive/2026-10-02-co
     dropped silently.
 33. A converted one-line include keeps the include string's bytes and quotes as the `$ref` value. New overrides copy
     the quoting of the preceding entry (at first, the `$ref` value's).
+34. `set --in-include` changes only where new keys go. Existing values keep the override rule, so the flag can never
+    leave an override hiding the value just written.
+35. `--in-include` is accepted where no include is involved and changes nothing there, since the step-1 rule picks
+    the same file; scripts need not check for includes first.
+36. With `--in-include`, a new key under a section merged from an included file and overrides goes into the included
+    file (where the shared content lives); under a section that exists only in an override, into the override's
+    file, the only file that holds it.
+37. With `--in-include` and nested includes, the key goes into the innermost included file: the file containing its
+    deepest existing ancestor.
+38. `--in-include` adds no exit codes and does not change the recorded events: history records values, not files.
 
 ## Development
 
