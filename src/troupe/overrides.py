@@ -5,7 +5,7 @@ overrides: mappings on both sides merge recursively, anything else in the overri
 keep their order, and keys only the overrides have follow, in their order.
 """
 
-from troupe.tree import Entry, MappingNode, ScalarNode, include_target
+from troupe.tree import Entry, Include, MappingNode, ScalarNode, include_target
 
 REF_KEY = "$ref"
 
@@ -22,6 +22,12 @@ def override_entries(mapping: MappingNode) -> list[Entry]:
     """The overrides of a mapping-form include: every entry but `$ref`."""
     ref = ref_entry(mapping)
     return [e for e in mapping.entries if e is not ref]
+
+
+def is_bare(include: Include, value: object) -> bool:
+    """Whether `value` is the include's own string and the include has no overrides, so it means the same."""
+    no_overrides = include.overrides is None or not override_entries(include.overrides)
+    return no_overrides and isinstance(value, str) and value == include.string.value
 
 
 def merge(base: MappingNode, override: MappingNode, entries: list[Entry]) -> MappingNode:

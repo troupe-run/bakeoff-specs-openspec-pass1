@@ -15,6 +15,7 @@ from troupe.edit.text import apply_edits
 from troupe.errors import LoadError, WriteRefused
 from troupe.leaves import diff_leaves, leaves
 from troupe.loader import Config, load
+from troupe.overrides import is_bare, ref_entry
 from troupe.paths import Path, format_path
 from troupe.schema import Data, same
 from troupe.store import Change
@@ -60,28 +61,72 @@ def _apply(config: Config, op: Op, texts: dict[FsPath, str]) -> None:
         assert isinstance(node, TextNode)
         texts[node.target.path.resolve()] = to_crlf(op.text) if "\r\n" in node.target.text else op.text
         return
-    if isinstance(op, AddOverride):
-        src, edits = _add_override(config.root, op)
+    for src, edits in _edits(config.root, op, where):
         file_key = src.path.resolve()
         texts[file_key] = apply_edits(texts[file_key], edits)
-        return
-    parent = _node_at(config.root, op.path[:-1])
+
+
+def _edits(root: Node, op: Op, where: str) -> list[prim.FileEdits]:
+    if isinstance(op, AddOverride):
+        return [_add_override(root, op)]
+    parent = _node_at(root, op.path[:-1])
     key = op.path[-1]
     if isinstance(op, AddKey):
         assert isinstance(parent, MappingNode) and not parent.layers, where
-        src, edits = prim.add_key(parent, key, op.value)
-    elif isinstance(op, Append):
+        return [prim.add_key(parent, key, op.value)]
+    if isinstance(op, Append):
         assert isinstance(parent, SequenceNode)
-        src, edits = prim.append_item(parent, op.value)
-    elif isinstance(op, Delete):
-        assert isinstance(parent, MappingNode | SequenceNode)
-        index = [e.key for e in parent.entries].index(key) if isinstance(parent, MappingNode) else int(key)
-        src, edits = prim.delete(parent, index, where)
-    else:
-        assert isinstance(op, Replace)
-        src, edits = prim.replace(_slot(parent, key), op.value, where)
-    file_key = src.path.resolve()
-    texts[file_key] = apply_edits(texts[file_key], edits)
+        return [prim.append_item(parent, op.value)]
+    if isinstance(op, Delete):
+        if isinstance(parent, SequenceNode):
+            return [prim.delete(parent, int(key), where)]
+        assert isinstance(parent, MappingNode)
+        return _delete_key(root, op.path[:-1], parent, key, where)
+    assert isinstance(op, Replace)
+    return [prim.replace(_slot(parent, key), op.value, where)]
+
+
+def _delete_key(root: Node, path: Path, parent: MappingNode, key: str, where: str) -> list[prim.FileEdits]:
+    """Delete `key` from every mapping `parent` was merged from, so that no layer brings it back.
+
+    An override mapping that would be left empty is deleted from its own parent instead (an empty override
+    changes nothing), up to the mapping that holds `$ref`, which stays.
+    """
+    out: list[prim.FileEdits] = []
+    for depth, layer in enumerate(parent.layers or [parent]):
+        entry = layer.get(key)
+        if entry is None:
+            continue
+        if depth > 0 and len(layer.entries) == 1 and ref_entry(layer) is None:
+            out.extend(_delete_layer(root, path, layer, where))
+        else:
+            out.append(prim.delete(layer, layer.entries.index(entry), where))
+    return _by_file(out)
+
+
+def _delete_layer(root: Node, path: Path, layer: MappingNode, where: str) -> list[prim.FileEdits]:
+    """Delete the override mapping `layer` (the value at `path`) from the override that holds it."""
+    holder = _node_at(root, path[:-1])
+    assert isinstance(holder, MappingNode), where
+    for depth, outer in enumerate(holder.layers or [holder]):
+        entry = outer.get(path[-1])
+        if entry is not None and entry.value is layer:
+            if depth > 0 and len(outer.entries) == 1 and ref_entry(outer) is None:
+                return _delete_layer(root, path[:-1], outer, where)
+            return [prim.delete(outer, outer.entries.index(entry), where)]
+    raise AssertionError(f"{where}: no override holds the mapping at {format_path(path)}")
+
+
+def _by_file(file_edits: list[prim.FileEdits]) -> list[prim.FileEdits]:
+    """The same edits, one group per file, so edits to one file are applied to the same text."""
+    grouped: dict[FsPath, prim.FileEdits] = {}
+    for src, edits in file_edits:
+        key = src.path.resolve()
+        if key in grouped:
+            grouped[key][1].extend(edits)
+        else:
+            grouped[key] = (src, list(edits))
+    return list(grouped.values())
 
 
 def _add_override(root: Node, op: AddOverride) -> prim.FileEdits:
@@ -117,10 +162,12 @@ def to_crlf(text: str) -> str:
 
 
 def _slot(parent: Node, key: str) -> prim.Slot:
+    """Where the value at `key` is written: for a merged mapping, in the last layer that sets it."""
     if isinstance(parent, MappingNode):
-        entry = parent.get(key)
+        layer = next(m for m in reversed(parent.layers or [parent]) if m.get(key) is not None)
+        entry = layer.get(key)
         assert entry is not None
-        return prim.Slot(node=entry.value, parent=parent, entry=entry)
+        return prim.Slot(node=entry.value, parent=layer, entry=entry)
     assert isinstance(parent, SequenceNode)
     item: Item = parent.items[int(key)]
     return prim.Slot(node=item.value, parent=parent, item=item)
@@ -159,7 +206,7 @@ def _with_value(data: Data, path: Path, value: Data) -> Data:
 
 def _matches(node: Node, expected: Data) -> bool:
     """Whether the re-loaded tree spells `expected`; an include string in `expected` matches its include."""
-    if node.include is not None and isinstance(expected, str) and expected == node.include.string.value:
+    if node.include is not None and is_bare(node.include, expected):
         return True
     if isinstance(node, MappingNode):
         return (

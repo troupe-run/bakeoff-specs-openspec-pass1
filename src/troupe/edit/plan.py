@@ -8,6 +8,7 @@ deleting one is refused.
 from dataclasses import dataclass
 
 from troupe.errors import PathError, WriteRefused
+from troupe.overrides import is_bare
 from troupe.paths import Path, format_path, is_index
 from troupe.schema import Data, same
 from troupe.tree import MappingNode, Node, ScalarNode, SequenceNode, TextNode, to_data
@@ -143,7 +144,7 @@ def _check_no_includes(node: Node, path: Path) -> None:
 def _diff(root: Node, node: Node, value: Data, path: Path, ops: list[Op]) -> None:
     where = format_path(path)
     include = node.include
-    if include is not None and isinstance(value, str) and value == include.string.value:
+    if include is not None and is_bare(include, value):
         return
     if isinstance(node, TextNode):
         if not isinstance(value, str):

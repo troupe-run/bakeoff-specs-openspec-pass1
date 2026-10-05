@@ -16,9 +16,9 @@
 
 ## 3. Existing values, deletes and include equality
 
-- [ ] 3.1 Make `_slot` pick the winning layer's entry and `Delete` remove a key from every layer, moving up past emptied override mappings and stopping at `$ref` mappings (D5); verify `uv run mypy` is clean
-- [ ] 3.2 Make `_diff` and `_matches` treat the bare include string as equal only when the include has no overrides (D5); verify the existing `tests/test_set_targets.py` include tests still pass
-- [ ] 3.3 Add tests for the modified config-set requirements: overridden value changes the override; non-overridden value changes in the included file; deleting an overridden key (both files byte-exact); replacing an overridden mapping by a scalar; `set coder file:agents/coder.yaml` with overrides exits 3 naming `coder` with no file changed; parent set that keeps the merged value changes only `other`; verify they pass, and that the delete test fails if only the override layer is deleted
+- [x] 3.1 Make `_slot` pick the winning layer's entry and `Delete` remove a key from every layer, moving up past emptied override mappings and stopping at `$ref` mappings (D5); verify `uv run mypy` is clean
+- [x] 3.2 Make `_diff` and `_matches` treat the bare include string as equal only when the include has no overrides (D5); verify the existing `tests/test_set_targets.py` include tests still pass
+- [x] 3.3 Add tests for the modified config-set requirements: overridden value changes the override; non-overridden value changes in the included file; deleting an overridden key (both files byte-exact); replacing an overridden mapping by a scalar; `set coder file:agents/coder.yaml` with overrides exits 3 naming `coder` with no file changed; parent set that keeps the merged value changes only `other`; verify they pass, and that the delete test fails if only the override layer is deleted
 
 ## 4. Reconcile, watch and documentation
 

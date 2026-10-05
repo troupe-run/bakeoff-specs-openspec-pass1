@@ -193,3 +193,76 @@ def test_second_override_after_a_mapping_form_entry_goes_below_its_overrides(the
         **files,
         "troupe.yml": "agents:\n  coder:\n    $ref: file:c.yaml\n    t: 1\n  x: 1\nz: 1\n",
     }
+
+
+# --- existing values, deletes and include equality -------------------------------------------------------
+
+OVERRIDDEN = {
+    "troupe.yml": "coder:\n  $ref: file:agents/coder.yaml\n  temperature: 0.3\n",
+    "agents/coder.yaml": "model: m\ntemperature: 0.2\n",
+}
+LIMITS = {
+    "troupe.yml": "coder:\n  $ref: file:agents/coder.yaml\n  limits:\n    calls: 9\n",
+    "agents/coder.yaml": "limits:\n  tokens: 100\n  calls: 5\n",
+}
+
+
+def test_overridden_value_changes_the_override(theatre: Theatre) -> None:
+    after = set_and_read(theatre, OVERRIDDEN, "coder.temperature", "0.5")
+    assert after == {
+        **OVERRIDDEN,
+        "troupe.yml": "coder:\n  $ref: file:agents/coder.yaml\n  temperature: 0.5\n",
+    }
+
+
+def test_value_that_is_not_overridden_changes_in_the_included_file(theatre: Theatre) -> None:
+    after = set_and_read(theatre, OVERRIDDEN, "coder.model", "m2")
+    assert after == {**OVERRIDDEN, "agents/coder.yaml": "model: m2\ntemperature: 0.2\n"}
+
+
+def test_deleting_an_overridden_key_removes_it_from_both_files(theatre: Theatre) -> None:
+    after = set_and_read(theatre, LIMITS, "coder.limits", "{tokens: 100}")
+    assert after == {
+        "troupe.yml": "coder:\n  $ref: file:agents/coder.yaml\n",
+        "agents/coder.yaml": "limits:\n  tokens: 100\n",
+    }
+    assert theatre.run("show", "coder.limits").out == "tokens: 100\n"
+
+
+def test_deleting_one_of_several_override_keys_keeps_the_override_mapping(theatre: Theatre) -> None:
+    files = {
+        "troupe.yml": "coder:\n  $ref: file:agents/coder.yaml\n  limits:\n    calls: 9\n    burst: 2\n",
+        "agents/coder.yaml": "limits:\n  tokens: 100\n",
+    }
+    after = set_and_read(theatre, files, "coder.limits", "{tokens: 100, burst: 2}")
+    assert after == {
+        **files,
+        "troupe.yml": "coder:\n  $ref: file:agents/coder.yaml\n  limits:\n    burst: 2\n",
+    }
+
+
+def test_replacing_an_overridden_mapping_writes_the_override(theatre: Theatre) -> None:
+    after = set_and_read(theatre, LIMITS, "coder.limits", "5")
+    assert after == {**LIMITS, "troupe.yml": "coder:\n  $ref: file:agents/coder.yaml\n  limits: 5\n"}
+
+
+def test_setting_the_bare_include_string_with_overrides_is_refused(theatre: Theatre) -> None:
+    for name, text in OVERRIDDEN.items():
+        theatre.write(name, text)
+    before = theatre.snapshot()
+    r = theatre.run("set", "coder", "file:agents/coder.yaml")
+    assert (r.code, r.out) == (3, "")
+    assert "coder" in r.err
+    assert theatre.snapshot() == before
+
+
+def test_parent_set_that_keeps_the_merged_value_changes_only_the_rest(theatre: Theatre) -> None:
+    files = {
+        "troupe.yml": "agents:\n  coder:\n    $ref: file:agents/coder.yaml\n    temperature: 0.3\n  other: 1\n",
+        "agents/coder.yaml": "model: m\n",
+    }
+    after = set_and_read(theatre, files, "agents", "{coder: {model: m, temperature: 0.3}, other: 2}")
+    assert after == {
+        **files,
+        "troupe.yml": "agents:\n  coder:\n    $ref: file:agents/coder.yaml\n    temperature: 0.3\n  other: 2\n",
+    }
