@@ -24,7 +24,7 @@
 
 - [ ] 4.1 Add to `tests/test_reconcile.py` the config-sync scenarios "Override added by hand" (event `set coder.temperature` 0.2 → 0.3, via `file`) and "Converting to mapping form records nothing", and to `tests/test_watch.py` "File included through $ref is watched"; add a `history` check that `set coder.temperature 0.3` on a scalar-form include records one `set` event for `coder.temperature` (old 0.2) via `cli`; verify they pass
 - [ ] 4.2 Add a smoke test through `uv run troupe config` that sets a new key under a scalar-form include and checks `troupe.yml`, the unchanged included file and `show --sources`; verify it passes
-- [ ] 4.3 Update README: an "Includes" section describing mapping form, `$ref`, deep merge, where `set` writes (new keys as overrides, existing values where they live, lists, deletes), the exit 4 cases, the BREAKING note for existing `$ref: file:` data and step-4 rollback; a worked example; `overrides.py` in the code map; design decisions D3–D6 appended to the decisions list, with this change's design.md added to the referenced files; verify each new README command runs as written against `/tmp/demo`
+- [ ] 4.3 Update README: an "Includes" section describing mapping form, `$ref`, deep merge, where `set` writes (new keys as overrides, existing values where they live, lists, deletes), the exit 4 cases, the BREAKING note for existing `$ref: file:` data and step-4 rollback; a worked example; `overrides.py` in the code map; design decisions D3–D6 and each D9 choice with its reason appended to the decisions list, with this change's design.md added to the referenced files; verify each new README command runs as written against `/tmp/demo`
 
 ## 5. Integration
 

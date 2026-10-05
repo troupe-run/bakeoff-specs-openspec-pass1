@@ -83,11 +83,11 @@ physical override mapping as far as keys exist, then calls `prim.add_key` on tha
 nested (`_nest`), so the placement, quoting and indentation rules are the existing ones. If not, it calls
 `prim.to_mapping_form(include.string, slot, entries)` (D6). The included file never receives an `AddOverride` edit.
 
-**Nested includes (contract reading):** the anchor is the *nearest* include, so a key under `coder.limits`, where
-`agents/coder.yaml` includes `limits.yaml`, is written in `agents/coder.yaml`. The contract names "the file that
-contains the include reference". For nested includes that is the nearest one, and it keeps each override next to
-the `$ref` it modifies. The alternative was to always write into the root config file, which is never shared. We
-rejected it because it is not what the contract says. Changing it is a one-place change in `new_key_target`.
+**Nested includes (confirmed by the product owner):** the anchor is the *nearest* include, so a key under
+`coder.limits`, where `agents/coder.yaml` includes `limits.yaml`, is written in `agents/coder.yaml`. The contract
+defines the including file as "the file that contains the include reference". With nested includes, that is the file
+holding the reference to the include that the key's deepest existing ancestor comes from. Always writing into the
+root config file was considered and rejected: it is not the contract's definition.
 
 ### D5. Existing values and deletions go to physical layers
 - `_slot(parent, key)` takes the key's entry from the last layer of `parent.layers` that has it (or from `parent`
@@ -124,6 +124,34 @@ include string, the mapping becomes an include and the data no longer matches.
 ### D8. Reconcile, history and `watch` need no code change
 They see merged data and `config.files`, which includes every file reached through `$ref`. Tests prove it (spec
 config-sync scenarios) instead of new code.
+
+### D9. Points the contract leaves open, and what we chose
+The product owner confirmed which of these are out of contract. Each choice and its reason:
+- **Overrides on non-mapping YAML content (list, scalar, empty file) → exit 4.** "Deep-merge" is only defined
+  between mappings. Any other reading means guessing: drop the included content, ignore the overrides, or treat null
+  as `{}`. Each guess can show a value the user did not write. Refusing to load names both files, loses nothing and
+  can be relaxed later without breaking anyone. An empty file is treated the same, because it loads as null (spec
+  config-show "Empty included YAML file"), not as a mapping.
+- **`$ref` whose value is not an include string → ordinary key.** The contract defines mapping form only for "a
+  `$ref` key whose value is the include string". Treating other values as ordinary keys keeps every existing file
+  loading exactly as before, and `show` makes such a key visible. The alternative, exit 4, would turn a file that
+  loads today into one that fails, for a case the contract does not mention.
+- **Deleting a key that both the included file and an override set → removed from both.** The contract covers
+  changing a value, not deleting one that two files set. Overrides cannot delete (there is no tombstone syntax). So
+  removing only the override would let the included value reappear, and `set` would not do what was asked (the
+  verifier would refuse it with exit 3). Removing it everywhere does what the user asked. The included file still
+  changes only for a deletion of a key it holds, as it does today for keys that are not overridden.
+- **An override mapping left empty by a delete is removed; a `$ref` mapping is kept.** An empty override such as
+  `limits: {}` changes nothing in the merged value, so it would only be clutter the user did not write. The `$ref`
+  mapping is kept in mapping form, with no conversion back to scalar form, so that the delete changes only the lines
+  it must.
+- **A list item that is an include converts to `- $ref: STRING` with the overrides below, at the string's column.**
+  The contract fixes the layout only for a mapping entry. The compact form is the smallest edit: it inserts `$ref: `
+  and new lines, and leaves the item's line, including an end-of-line comment, otherwise intact. It is also the form
+  `show` uses for list items that are mappings. The alternative, a bare `-` followed by an indented mapping, rewrites
+  more of the line and leaves an unusual dangling dash.
+- **`set PATH STRING` on a mapping-form include that has overrides → exit 3** (covered by the contract: it replaces a
+  value whose whole value comes from an include).
 
 ## Risks / Trade-offs
 
