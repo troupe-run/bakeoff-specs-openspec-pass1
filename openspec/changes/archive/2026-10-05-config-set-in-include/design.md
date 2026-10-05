@@ -63,3 +63,10 @@ The contract says only that `set --in-include PATH VALUE` "writes a new key into
   It is opt-in, and the default (CR-A) keeps shared files untouched.
 - [This change depends on unimplemented work in `config-include-overrides`] → tasks.md starts by checking that
   change is implemented. The archive order is `config-include-overrides` first, then this change.
+
+## Archive decision
+
+The change was archived with its delta specs **synced** into `openspec/specs/`, for the same reason as
+`config-include-overrides`. Archiving without syncing would leave the main specs without `--in-include` while the
+code, tests and README have it, contradicting the rule that spec, code and tests agree. Syncing changes only spec
+files and keeps every existing scenario.

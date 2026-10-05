@@ -214,7 +214,7 @@ on the `.troupe/` directory), so troupe never records its own write-back a secon
 These are recorded with their reasons in `openspec/changes/archive/2026-10-02-config-load-show-set/design.md`,
 `openspec/changes/archive/2026-10-03-config-sync-with-files/design.md`, `openspec/changes/archive/2026-10-03-config-get-and-show/design.md`,
 `openspec/changes/archive/2026-10-04-config-lineage/design.md`, `openspec/changes/archive/2026-10-05-config-include-overrides/design.md`
-and `openspec/changes/config-set-in-include/design.md`:
+and `openspec/changes/archive/2026-10-05-config-set-in-include/design.md`:
 
 1. Setting a key under a null or scalar value (e.g. `agents:` with nothing after it) exits 5. Set the parent to a
    mapping first: `set agents '{coder: {model: x}}'`.
