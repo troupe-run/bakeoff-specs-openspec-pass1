@@ -94,3 +94,13 @@ def test_sources_with_a_relative_theatre(
     monkeypatch.chdir(theatre.root.parent)
     r = run("show", "--sources", "--theatre", Path(theatre.root.name).as_posix())
     assert r.out == f"a: 1{T}\n"
+
+
+def test_sources_name_the_overriding_file_for_overridden_values(theatre: Theatre) -> None:
+    theatre.write("troupe.yml", "coder:\n  $ref: file:agents/coder.yaml\n  temperature: 0.3\n")
+    theatre.write("agents/coder.yaml", "model: m1\ntemperature: 0.2\n")
+    r = theatre.run("show", "--sources")
+    assert (r.code, r.err) == (0, "")
+    assert r.out == (
+        "coder:\n  model: m1 # from .troupe/agents/coder.yaml\n  temperature: 0.3 # from .troupe/troupe.yml\n"
+    )

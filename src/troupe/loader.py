@@ -5,8 +5,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from troupe.errors import LoadError
+from troupe.overrides import REF_KEY, merge, override_entries, ref_entry
 from troupe.source import SourceFile, read_source
 from troupe.tree import (
+    Entry,
     Include,
     MappingNode,
     Node,
@@ -14,11 +16,11 @@ from troupe.tree import (
     SequenceNode,
     TextNode,
     build_tree,
+    include_target,
 )
 
 CONFIG_DIR = ".troupe"
 CONFIG_NAMES = ("troupe.yml", "troupe.yaml")
-INCLUDE_PREFIX = "file:"
 YAML_SUFFIXES = (".yml", ".yaml")
 
 
@@ -34,13 +36,6 @@ def find_config(theatre: Path) -> Path:
     if len(present) > 1:
         raise LoadError(f"{present[0]} and {present[1]}: both exist; keep only one")
     return present[0]
-
-
-def include_target(node: ScalarNode) -> str | None:
-    """The path named by an include string, or None if the scalar is not an include."""
-    if isinstance(node.value, str) and node.value.startswith(INCLUDE_PREFIX) and not node.tagged:
-        return node.value[len(INCLUDE_PREFIX) :]
-    return None
 
 
 def is_yaml_target(target: str | Path) -> bool:
@@ -92,12 +87,39 @@ class _Loader:
                     return node
                 return self.include(node, base / target, stack)
             case MappingNode():
+                ref = ref_entry(node)
                 for entry in node.entries:
-                    entry.value = self.expand(entry.value, base, stack)
+                    if entry is not ref:
+                        entry.value = self.expand(entry.value, base, stack)
+                if ref is not None:
+                    return self.include_mapping(node, ref, base, stack)
             case SequenceNode():
                 for item in node.items:
                     item.value = self.expand(item.value, base, stack)
         return node
+
+    def include_mapping(self, mapping: MappingNode, ref: Entry, base: Path, stack: tuple[Path, ...]) -> Node:
+        """A mapping-form include: the included content deep-merged with the mapping's other entries."""
+        string = ref.value
+        assert isinstance(string, ScalarNode)
+        target = include_target(string)
+        assert target is not None
+        path = base / target
+        root = self.include(string, path, stack)
+        entries = override_entries(mapping)
+        if entries:
+            if isinstance(root, TextNode):
+                raise LoadError(
+                    f"{mapping.file.path}: {REF_KEY} {path} is not a YAML file, so it cannot have other keys"
+                )
+            if not isinstance(root, MappingNode):
+                raise LoadError(
+                    f"{mapping.file.path}: {REF_KEY} {path} is not a mapping, so it cannot have other keys"
+                )
+            root = merge(root, mapping, entries)
+        root.include = Include(string=string, target=path, overrides=mapping)
+        root.in_flow = mapping.in_flow
+        return root
 
     def include(self, string: ScalarNode, path: Path, stack: tuple[Path, ...]) -> Node:
         key = path.resolve()

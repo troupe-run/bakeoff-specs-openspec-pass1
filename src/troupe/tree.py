@@ -36,6 +36,7 @@ class Include:
 
     string: "ScalarNode"
     target: Path
+    overrides: "MappingNode | None" = None  # mapping form: the `$ref` mapping, as written where it is
 
 
 @dataclass(eq=False, kw_only=True)
@@ -76,6 +77,9 @@ class Entry:
 class MappingNode(Node):
     flow_style: bool
     entries: list[Entry] = field(default_factory=list)
+    # For a mapping merged from included content and overrides: the mappings as written, included first.
+    # Empty for a mapping as written in one file.
+    layers: list["MappingNode"] = field(default_factory=list)
 
     def get(self, key: str) -> Entry | None:
         for entry in self.entries:
@@ -94,6 +98,16 @@ class Item:
 class SequenceNode(Node):
     flow_style: bool
     items: list[Item] = field(default_factory=list)
+
+
+INCLUDE_PREFIX = "file:"
+
+
+def include_target(node: ScalarNode) -> str | None:
+    """The path named by an include string, or None if the scalar is not an include."""
+    if isinstance(node.value, str) and node.value.startswith(INCLUDE_PREFIX) and not node.tagged:
+        return node.value[len(INCLUDE_PREFIX) :]
+    return None
 
 
 def to_data(node: Node) -> Data:
