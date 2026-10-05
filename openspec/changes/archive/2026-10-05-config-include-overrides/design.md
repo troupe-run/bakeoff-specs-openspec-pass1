@@ -170,3 +170,11 @@ The product owner confirmed which of these are out of contract. Each choice and 
 
 Nothing to migrate: scalar-form includes load as before. Only new writes produce mapping form. Rolling back means
 removing `$ref` mappings by hand (see Risks).
+
+## Archive decision
+
+The change was archived with its delta specs **synced** into `openspec/specs/`. The brief did not say whether to
+sync. Archiving without syncing would leave the main specs describing step-4 behaviour (new keys written into the
+shared file) while the code and tests do the opposite. That contradicts the contract and the rule that spec, code
+and tests agree. Syncing changes only spec files, keeps every existing scenario, and matches how every earlier change
+was archived.

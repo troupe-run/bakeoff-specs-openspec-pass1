@@ -98,7 +98,8 @@ The output SHALL end with a single line break, and nothing SHALL be written to s
 end-of-line comment ` # from <file>` (one space, `#`, one space) to every line that holds a scalar value. For a scalar
 written as a literal block, the comment goes on the line with the `|` indicator. Lines that hold only a key whose
 value starts on the next line, the content lines of a literal block, and lines whose value is `{}` or `[]` get no
-comment. `<file>` SHALL be the file the scalar is written in, relative to the theatre directory, with `/` separators
+comment. `<file>` SHALL be the file the scalar is written in (for a value that an include override sets, the file holding
+the override), relative to the theatre directory, with `/` separators
 and no `.` segments. For a text include, `<file>` SHALL be the included file, not the file holding the `file:` string.
 When the value at `PATH` is a scalar, `--sources` SHALL print it as a one-scalar YAML document with the comment, not in
 the `get` form. With or without the comments, the output SHALL read back as the same data.
@@ -126,3 +127,7 @@ the `get` form. With or without the comments, the output SHALL read back as the 
 #### Scenario: config.yaml name
 - **WHEN** the config file is `.troupe/troupe.yaml` containing `a: 1\n` and `show --sources` is run
 - **THEN** stdout is `a: 1 # from .troupe/troupe.yaml\n`
+
+#### Scenario: Sources with overrides
+- **WHEN** `troupe.yml` is `coder:\n  $ref: file:agents/coder.yaml\n  temperature: 0.3\n`, `agents/coder.yaml` is `model: m1\ntemperature: 0.2\n`, and `show --sources` is run
+- **THEN** stdout is `coder:\n  model: m1 # from .troupe/agents/coder.yaml\n  temperature: 0.3 # from .troupe/troupe.yml\n`
