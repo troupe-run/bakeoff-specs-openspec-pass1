@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path as FsPath
 
 from troupe.edit import ops as prim
-from troupe.edit.plan import AddKey, Append, Delete, Op, Replace, WriteText, plan
+from troupe.edit.plan import AddKey, AddOverride, Append, Delete, Op, Replace, WriteText, nest, plan
 from troupe.edit.text import apply_edits
 from troupe.errors import LoadError, WriteRefused
 from troupe.leaves import diff_leaves, leaves
@@ -18,7 +18,7 @@ from troupe.loader import Config, load
 from troupe.paths import Path, format_path
 from troupe.schema import Data, same
 from troupe.store import Change
-from troupe.tree import Item, MappingNode, Node, ScalarNode, SequenceNode, TextNode, to_data
+from troupe.tree import Entry, Item, MappingNode, Node, ScalarNode, SequenceNode, TextNode, to_data
 
 
 @dataclass
@@ -60,10 +60,15 @@ def _apply(config: Config, op: Op, texts: dict[FsPath, str]) -> None:
         assert isinstance(node, TextNode)
         texts[node.target.path.resolve()] = to_crlf(op.text) if "\r\n" in node.target.text else op.text
         return
+    if isinstance(op, AddOverride):
+        src, edits = _add_override(config.root, op)
+        file_key = src.path.resolve()
+        texts[file_key] = apply_edits(texts[file_key], edits)
+        return
     parent = _node_at(config.root, op.path[:-1])
     key = op.path[-1]
     if isinstance(op, AddKey):
-        assert isinstance(parent, MappingNode)
+        assert isinstance(parent, MappingNode) and not parent.layers, where
         src, edits = prim.add_key(parent, key, op.value)
     elif isinstance(op, Append):
         assert isinstance(parent, SequenceNode)
@@ -77,6 +82,33 @@ def _apply(config: Config, op: Op, texts: dict[FsPath, str]) -> None:
         src, edits = prim.replace(_slot(parent, key), op.value, where)
     file_key = src.path.resolve()
     texts[file_key] = apply_edits(texts[file_key], edits)
+
+
+def _add_override(root: Node, op: AddOverride) -> prim.FileEdits:
+    """Write the new key as an override of the include at `op.include_path`, where its reference is.
+
+    The key goes into the deepest mapping of its path that the overrides already have. A scalar-form
+    include is first turned into mapping form.
+    """
+    node = _node_at(root, op.include_path)
+    include = node.include
+    assert include is not None, op.include_path
+    rel = op.path[len(op.include_path) :]
+    if include.overrides is None:
+        key: Entry | None = None
+        if op.include_path:
+            parent = _node_at(root, op.include_path[:-1])
+            if isinstance(parent, MappingNode):
+                key = parent.get(op.include_path[-1])
+        return prim.to_mapping_form(include.string, key, {rel[0]: nest(rel[1:], op.value)})
+    mapping = include.overrides
+    while len(rel) > 1:
+        entry = mapping.get(rel[0])
+        if entry is None:
+            break
+        assert isinstance(entry.value, MappingNode) and entry.value.include is None, op.path
+        mapping, rel = entry.value, rel[1:]
+    return prim.add_key(mapping, rel[0], nest(rel[1:], op.value))
 
 
 def to_crlf(text: str) -> str:

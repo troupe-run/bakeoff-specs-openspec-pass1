@@ -30,6 +30,7 @@ from troupe.edit.text import (
     owned_end,
 )
 from troupe.errors import WriteRefused
+from troupe.overrides import REF_KEY
 from troupe.schema import Data
 from troupe.source import SourceFile
 from troupe.tree import Entry, Item, MappingNode, Node, ScalarNode, SequenceNode
@@ -220,6 +221,39 @@ def add_key(mapping: MappingNode, key: str, value: Data) -> FileEdits:
         pos = insertion_point(src, owned_end(mapping), col)
     lines = entry_lines(key, value, col, layout, key_style=key_style, value_style=value_style)
     return src, [insert_lines(src, pos, lines)]
+
+
+def to_mapping_form(string: ScalarNode, key: Entry | None, entries: dict[str, Data]) -> FileEdits:
+    """Turn the include `string` into a mapping-form include holding `$ref` and the override `entries`.
+
+    `key` is the block mapping entry whose value is `string` (None for a list item or the document root).
+    On the key's line, the string and the space before it go, and the mapping follows one indentation unit
+    deeper. Otherwise `$ref: ` goes in front of the string and the entries follow at its column. The
+    string's bytes are kept.
+    """
+    src = string.file
+    if string.block is not None:
+        raise WriteRefused(f"{src.path}: cannot convert a block-scalar include to mapping form")
+    written = src.text[string.start : string.end]
+    style = _scalar_style(string)
+    if string.in_flow:
+        items = ", ".join(
+            f"{render_key(k, None, flow=True)}: {flow_text(v, style, flow=True)}" for k, v in entries.items()
+        )
+        return src, [inline_edit(src, string.start, string.end, f"{{{REF_KEY}: {written}, {items}}}")]
+    layout = detect_layout(src)
+    lines: list[str] = []
+    if key is not None and src.line_start(key.key_node.start) == src.line_start(string.start):
+        col = src.column(key.key_node.start) + layout.unit
+        lines.append(" " * col + f"{REF_KEY}: {written}")
+        edits = [Edit(_ws_start(src, string.start), string.end, "")]
+    else:
+        col = src.column(string.start)
+        edits = [inline_edit(src, string.start, string.start, f"{REF_KEY}: ")]
+    for k, v in entries.items():
+        lines.extend(entry_lines(k, v, col, layout, value_style=style))
+    edits.append(insert_lines(src, src.next_line(string.end), lines))
+    return src, edits
 
 
 def append_item(seq: SequenceNode, value: Data) -> FileEdits:

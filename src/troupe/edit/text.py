@@ -114,7 +114,12 @@ def inline_edit(src: SourceFile, start: int, end: int, new: str) -> Edit:
 
 
 def owned_end(node: Node) -> int:
-    """The last offset belonging to the node's value (a kept block scalar owns its trailing blank lines)."""
+    """The last offset belonging to the node's value (a kept block scalar owns its trailing blank lines).
+
+    An included value ends where its reference does, in the file that holds the reference.
+    """
+    if node.include is not None:
+        return owned_end(node.include.overrides or node.include.string)
     if isinstance(node, ScalarNode) and node.block is not None and node.block.chomp == "+":
         return max(node.end, node.block.region_end - 1)
     if isinstance(node, MappingNode) and not node.flow_style and node.entries:

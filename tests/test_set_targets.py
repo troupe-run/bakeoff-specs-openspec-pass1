@@ -32,12 +32,14 @@ def test_value_inside_an_included_file_changes_only_that_file(theatre: Theatre) 
     assert theatre.read("agents/coder.yaml") == "model: m2   # pinned\ntemperature: 0.2\n"
 
 
-def test_new_key_inside_an_included_mapping_goes_into_that_file(theatre: Theatre) -> None:
+def test_new_key_inside_an_included_mapping_is_an_override_in_the_including_file(theatre: Theatre) -> None:
     theatre.write("troupe.yml", "agents:\n  coder: file:agents/coder.yaml\n")
     theatre.write("agents/coder.yaml", "model: m\n")
     assert theatre.run("set", "agents.coder.temperature", "0.2").code == 0
-    assert theatre.read("troupe.yml") == "agents:\n  coder: file:agents/coder.yaml\n"
-    assert theatre.read("agents/coder.yaml") == "model: m\ntemperature: 0.2\n"
+    assert theatre.read("agents/coder.yaml") == "model: m\n"
+    assert theatre.read("troupe.yml") == (
+        "agents:\n  coder:\n    $ref: file:agents/coder.yaml\n    temperature: 0.2\n"
+    )
 
 
 def test_text_include_content_becomes_value_exactly(theatre: Theatre) -> None:

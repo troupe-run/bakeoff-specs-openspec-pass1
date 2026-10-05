@@ -26,6 +26,13 @@ class AddKey:
 
 
 @dataclass(frozen=True)
+class AddOverride:
+    path: Path  # path of the new key, below the include at `include_path`
+    include_path: Path  # the include whose overrides get the key, in the file holding its reference
+    value: Data
+
+
+@dataclass(frozen=True)
 class Append:
     path: Path  # path of the new item (index == length)
     value: Data
@@ -42,7 +49,7 @@ class WriteText:
     text: str
 
 
-type Op = Replace | AddKey | Append | Delete | WriteText
+type Op = Replace | AddKey | AddOverride | Append | Delete | WriteText
 
 
 def describe(node: Node) -> str:
@@ -66,7 +73,7 @@ def plan(root: Node, path: Path, value: Data) -> list[Op]:
             if entry is None:
                 if any(is_index(s) for s in path[i:]):
                     raise PathError(f"{format_path(path)}: not found ({format_path(here)} does not exist)")
-                return [AddKey(here, _nest(rest, value))]
+                return [new_key_target(root, here, nest(rest, value))]
             node = entry.value
         elif isinstance(node, SequenceNode):
             if not is_index(segment):
@@ -85,11 +92,36 @@ def plan(root: Node, path: Path, value: Data) -> list[Op]:
                 f"{format_path(path)}: {format_path(path[:i])} is a scalar, not a mapping or list"
             )
     ops: list[Op] = []
-    _diff(node, value, path, ops)
+    _diff(root, node, value, path, ops)
     return ops
 
 
-def _nest(rest: Path, value: Data) -> Data:
+def new_key_target(root: Node, path: Path, value: Data) -> Op:
+    """Where the new key at `path` (whose parent mapping exists) is written.
+
+    A key whose parent lies inside an included value, with no list item between the include and the
+    parent, is written as an override of the nearest such include, in the file that holds the include's
+    reference. Anything else goes into the parent mapping's own file.
+    """
+    anchor: int | None = 0 if root.include is not None else None  # length of the anchoring include's path
+    node = root
+    for depth, segment in enumerate(path[:-1], start=1):
+        if isinstance(node, MappingNode):
+            entry = node.get(segment)
+            assert entry is not None, segment
+            node = entry.value
+        else:
+            assert isinstance(node, SequenceNode), segment
+            node = node.items[int(segment)].value
+            anchor = None  # overrides cannot address list items
+        if node.include is not None:
+            anchor = depth
+    if anchor is None:
+        return AddKey(path, value)
+    return AddOverride(path, path[:anchor], value)
+
+
+def nest(rest: Path, value: Data) -> Data:
     for segment in reversed(rest):
         value = {segment: value}
     return value
@@ -108,7 +140,7 @@ def _check_no_includes(node: Node, path: Path) -> None:
             _check_no_includes(item.value, (*path, str(index)))
 
 
-def _diff(node: Node, value: Data, path: Path, ops: list[Op]) -> None:
+def _diff(root: Node, node: Node, value: Data, path: Path, ops: list[Op]) -> None:
     where = format_path(path)
     include = node.include
     if include is not None and isinstance(value, str) and value == include.string.value:
@@ -133,14 +165,14 @@ def _diff(node: Node, value: Data, path: Path, ops: list[Op]) -> None:
         for key, child in value.items():
             existing = node.get(key)
             if existing is None:
-                adds.append(AddKey((*path, key), child))
+                adds.append(new_key_target(root, (*path, key), child))
             else:
-                _diff(existing.value, child, (*path, key), ops)
+                _diff(root, existing.value, child, (*path, key), ops)
         ops.extend(adds + deletes)
         return
     if isinstance(node, SequenceNode) and isinstance(value, list) and (value or not node.items):
         for index, (item, child) in enumerate(zip(node.items, value, strict=False)):
-            _diff(item.value, child, (*path, str(index)), ops)
+            _diff(root, item.value, child, (*path, str(index)), ops)
         for index in range(len(node.items), len(value)):
             ops.append(Append((*path, str(index)), value[index]))
         for index in reversed(range(len(value), len(node.items))):
