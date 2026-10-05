@@ -333,3 +333,12 @@ def test_include_added_while_nothing_runs_is_picked_up_by_show(make: Callable[[s
     t.write("troupe.yml", "a: 1\nprompt: file:prompt.md\n")
     assert t.run("show", "prompt").out == "Hello\n"
     assert brief(t)[1:] == [("set", "prompt", None, "Hello\n")]
+
+
+def test_file_included_through_ref_is_watched(theatre: Theatre, watching: Callable[[], Watch]) -> None:
+    theatre.write("troupe.yml", "coder:\n  $ref: file:agents/coder.yaml\n  temperature: 0.3\n")
+    theatre.write("agents/coder.yaml", "model: m1\n")
+    watching()
+    start = time.monotonic()
+    theatre.write("agents/coder.yaml", "model: m2\n")
+    recorded_within(theatre, 2, [("set", "coder.model", "m1", "m2")], start)

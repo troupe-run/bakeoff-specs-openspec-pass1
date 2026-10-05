@@ -224,3 +224,47 @@ def test_unloadable_configuration_records_nothing(make: Callable[[str], Theatre]
     assert t.run("set", "a", "3").code == 4
     t.write("troupe.yml", "a: 1\n")
     assert added(t, 1) == []
+
+
+# --- mapping-form includes ---------------------------------------------------------------------------------
+
+
+def test_override_added_by_hand_is_recorded_as_a_file_edit(theatre: Theatre) -> None:
+    theatre.write("troupe.yml", "coder: file:agents/coder.yaml\n")
+    theatre.write("agents/coder.yaml", "temperature: 0.2\n")
+    theatre.run("history")
+    theatre.write("troupe.yml", "coder:\n  $ref: file:agents/coder.yaml\n  temperature: 0.3\n")
+    assert theatre.run("get", "coder.temperature").out == "0.3\n"
+    new = events(theatre.run("history"))[1:]
+    assert [(e["op"], e["path"], e["old"], e["new"], e["via"]) for e in new] == [
+        ("set", "coder.temperature", 0.2, 0.3, "file")
+    ]
+
+
+def test_converting_an_include_to_mapping_form_records_nothing(theatre: Theatre) -> None:
+    theatre.write("troupe.yml", "coder: file:agents/coder.yaml\n")
+    theatre.write("agents/coder.yaml", "temperature: 0.2\n")
+    theatre.run("history")
+    theatre.write("troupe.yml", "coder:\n  $ref: file:agents/coder.yaml\n")
+    assert theatre.run("show").code == 0
+    assert added(theatre, 1) == []
+
+
+def test_set_of_a_new_override_records_one_cli_event(theatre: Theatre) -> None:
+    theatre.write("troupe.yml", "coder: file:agents/coder.yaml\n")
+    theatre.write("agents/coder.yaml", "model: m\n")
+    assert theatre.run("set", "coder.temperature", "0.3").code == 0
+    new = events(theatre.run("history"))[1:]
+    assert [(e["op"], e["path"], e["old"], e["new"], e["via"]) for e in new] == [
+        ("set", "coder.temperature", None, 0.3, "cli")
+    ]
+
+
+def test_set_after_a_hand_added_override_changes_the_override_and_records_both(theatre: Theatre) -> None:
+    theatre.write("troupe.yml", "coder: file:agents/coder.yaml\n")
+    theatre.write("agents/coder.yaml", "temperature: 0.2\n")
+    theatre.run("history")
+    theatre.write("troupe.yml", "coder:\n  $ref: file:agents/coder.yaml\n  extra: 1\n")
+    assert theatre.run("set", "coder.extra", "2").code == 0
+    assert theatre.read("agents/coder.yaml") == "temperature: 0.2\n"
+    assert added(theatre, 1) == [("set", "coder.extra", None, 1), ("set", "coder.extra", 1, 2)]

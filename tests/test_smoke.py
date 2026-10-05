@@ -191,3 +191,33 @@ def test_watch_through_uv_run_records_a_hand_edit_and_stops_on_sigterm(theatre: 
         if proc.poll() is None:
             proc.kill()
             proc.communicate()
+
+
+def test_new_key_under_an_include_becomes_an_override_end_to_end(theatre: Path) -> None:
+    d = theatre / ".troupe"
+    coder_before = (d / "agents" / "coder.yaml").read_bytes()
+    r = troupe(theatre, "set", "agents.coder.temperature", "0.3")
+    assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
+    assert (d / "agents" / "coder.yaml").read_bytes() == coder_before
+    assert (d / "troupe.yml").read_bytes() == (
+        b"# The demo theatre\n"
+        b"name: demo   # shown in the UI\n"
+        b"agents:\n"
+        b"  coder:\n"
+        b"    $ref: file:agents/coder.yaml\n"
+        b"    temperature: 0.3\n"
+        b"  reviewer:\n"
+        b"    model: 'small'\n"
+        b"    tools: [read]\n"
+        b"  # more agents here\n"
+        b"\n"
+        b"# global settings\n"
+        b"limits:\n"
+        b"  tokens: 1000\n"
+    )
+    shown = troupe(theatre, "show", "agents.coder", "--sources")
+    assert shown.stdout == (
+        "model: big # from .troupe/agents/coder.yaml\n"
+        'prompt: "You write code.\\r\\nBe brief.\\r\\n" # from .troupe/agents/coder.md\n'
+        "temperature: 0.3 # from .troupe/troupe.yml\n"
+    )
