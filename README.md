@@ -123,9 +123,56 @@ imports the files again, and the earlier history is lost.
 ### Includes
 
 A string starting with `file:` includes the named file, relative to the file containing it. A `.yml`/`.yaml` target is
-embedded as YAML; any other target's exact text becomes a string value. `set` writes into the file that holds the
-value. Setting a text include rewrites the target file (keeping CRLF line endings if it had them). Replacing a
-whole YAML include is refused.
+embedded as YAML; any other target's exact text becomes a string value. Setting a text include rewrites the target
+file (keeping CRLF line endings if it had them). Replacing a whole YAML include is refused (exit 3).
+
+Included files are shared between theatres, so an include can also be written in **mapping form**, with
+**overrides** next to it:
+
+```yaml
+agents:
+  coder:
+    $ref: file:agents/coder.yaml   # the shared file
+    temperature: 0.3               # an override, for this theatre only
+```
+
+The value is the included content deep-merged with the overrides: where both sides hold a mapping, they merge key
+by key; anything else in the override (a scalar or a list) replaces the included value. Included keys keep their
+order and keys only the overrides have come after them. `get`, `show` and `history` see the merged value, and
+`show --sources` names the file each value is actually written in. A `$ref` whose value is not an include string
+is an ordinary key. Overrides on a text include, or on an included file that does not hold a mapping (a list, a
+scalar or an empty file), fail to load (exit 4).
+
+Where `set` writes:
+
+- **A new key under an included section** is written as an override in the file that holds the include reference,
+  and the shared file does not change. A one-line include is converted to mapping form first, keeping its comment:
+  `coder: file:agents/coder.yaml  # c` becomes `coder:  # c`, `  $ref: file:agents/coder.yaml`,
+  `  temperature: 0.3`. With nested includes, the override goes next to the nearest include reference.
+- **An existing value** is changed where it lives: in the override if one sets it, else in the included file.
+- **Lists** are not reached by overrides. Appending an item, or adding a key inside an item, writes into the file
+  that holds the list.
+- **Deleting a key** (by setting its parent to a mapping without it) removes it from the included file and from
+  every override that sets it. An override mapping left empty is removed too.
+
+```sh
+mkdir -p /tmp/demo/.troupe/agents
+printf 'model: big\n' > /tmp/demo/.troupe/agents/coder.yaml
+printf 'agents:\n  coder: file:agents/coder.yaml  # shared\n' > /tmp/demo/.troupe/troupe.yml
+uv run troupe config set agents.coder.temperature 0.3 --theatre /tmp/demo
+cat /tmp/demo/.troupe/troupe.yml
+# agents:
+#   coder:  # shared
+#     $ref: file:agents/coder.yaml
+#     temperature: 0.3
+cat /tmp/demo/.troupe/agents/coder.yaml                  # model: big   (unchanged)
+uv run troupe config show agents.coder --sources --theatre /tmp/demo
+# model: big # from .troupe/agents/coder.yaml
+# temperature: 0.3 # from .troupe/troupe.yml
+```
+
+Mapping-form includes need step 5 or later. Older code reads `$ref` as an ordinary key, so going back means
+rewriting them as one-line includes (and moving the overrides into the shared file) by hand.
 
 ### Exit codes
 
@@ -134,7 +181,7 @@ whole YAML include is refused.
 | 0 | success |
 | 2 | usage error (bad arguments, path syntax, VALUE or `TROUPE_ACTOR`) |
 | 3 | write refused, so no file changed |
-| 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, include cycle) |
+| 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, include cycle, overrides on a text include or on included content that is not a mapping) |
 | 5 | path not found, or the wrong kind of node for the command |
 
 On failure stdout is empty and stderr names the path or file involved.
@@ -153,8 +200,8 @@ on the `.troupe/` directory), so troupe never records its own write-back a secon
 ## Decisions on points the contract leaves open
 
 These are recorded with their reasons in `openspec/changes/archive/2026-10-02-config-load-show-set/design.md`,
-`openspec/changes/archive/2026-10-03-config-sync-with-files/design.md`, `openspec/changes/archive/2026-10-03-config-get-and-show/design.md`
-and `openspec/changes/archive/2026-10-04-config-lineage/design.md`:
+`openspec/changes/archive/2026-10-03-config-sync-with-files/design.md`, `openspec/changes/archive/2026-10-03-config-get-and-show/design.md`,
+`openspec/changes/archive/2026-10-04-config-lineage/design.md` and `openspec/changes/config-include-overrides/design.md`:
 
 1. Setting a key under a null or scalar value (e.g. `agents:` with nothing after it) exits 5. Set the parent to a
    mapping first: `set agents '{coder: {model: x}}'`.
@@ -195,6 +242,23 @@ and `openspec/changes/archive/2026-10-04-config-lineage/design.md`:
 24. `--reason` applies only to the `set`'s own events. An empty reason is stored as `""`.
 25. Events from before lineage: actor unknown, via `import` or `file`, `at` from when they were stored, change
     `legacy-import` or `legacy-<seq>`.
+26. A mapping-form include with overrides whose included content is not a mapping (a list, a scalar or an empty
+    file) fails to load (exit 4). Deep-merge is only defined between mappings, and any other reading would show a
+    value nobody wrote.
+27. A `$ref` whose value is not an include string (e.g. `$ref: hello`) is an ordinary key, so every file that loaded
+    before step 5 loads the same.
+28. A new key under nested includes goes into the nearest including file: the one holding the reference to the include
+    that the key's deepest existing ancestor comes from (the contract's "including file").
+29. Deleting a key that both an included file and an override set removes it from both: overrides cannot delete, so
+    removing only the override would bring the included value back.
+30. An override mapping that a delete leaves empty is removed, since it changes nothing; the `$ref` mapping stays in
+    mapping form.
+31. A list item that is an include is converted as `- $ref: file:…` with its overrides below, at the include
+    string's column: the smallest edit, keeping the item's comment on its line.
+32. Setting a mapping-form include with overrides to its bare include string is refused (exit 3), so overrides are never
+    dropped silently.
+33. A converted one-line include keeps the include string's bytes and quotes as the `$ref` value. New overrides copy
+    the quoting of the preceding entry (at first, the `$ref` value's).
 
 ## Development
 
@@ -204,8 +268,8 @@ uv run mypy              # strict typing
 uv run ruff check && uv run ruff format --check
 ```
 
-Code map: `src/troupe/loader.py` (files and includes), `tree.py` (YAML nodes with source positions), `schema.py`
-(core-schema types and printing), `lineage.py` (actors, timestamps and change ids), `store.py` (event store),
-`edit/` (byte-surgical write-back: `plan.py` → `ops.py` → `apply.py`, with `scalars.py`, `blocks.py`, `folded.py`
-and `text.py` holding the quoting, block-scalar, folding and layout rules), `sync.py` (reconcile), `commands.py`
-(subcommands, the theatre lock and the `watch` loop) and `cli.py`.
+Code map: `src/troupe/loader.py` (files and includes), `overrides.py` (`$ref` and the deep merge), `tree.py` (YAML
+nodes with source positions), `schema.py` (core-schema types and printing), `lineage.py` (actors, timestamps and
+change ids), `store.py` (event store), `edit/` (byte-surgical write-back: `plan.py` → `ops.py` → `apply.py`, with
+`scalars.py`, `blocks.py`, `folded.py` and `text.py` holding the quoting, block-scalar, folding and layout rules),
+`sync.py` (reconcile), `commands.py` (subcommands, the theatre lock and the `watch` loop) and `cli.py`.
