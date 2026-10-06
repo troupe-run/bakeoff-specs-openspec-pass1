@@ -186,3 +186,17 @@ is silent, we took the choice that cannot change a value the user did not name:
 No data migration. The event store is untouched and new events are ordinary `set`/`remove` events. Rolling back to
 earlier code makes configurations with anchors fail to load (exit 4) again, and history recorded meanwhile stays
 readable. README decision 8 is replaced by the new rules and the D8 choices.
+
+## Implementation notes
+
+What the implementation added beyond the decisions above, and why:
+- **Expected value by node identity** (`apply._expected`). The read-back check built the intended configuration
+  from plain data, so it expected only `PATH` to change and refused every set at an anchor (the aliases changed
+  too). It now replaces the changed node wherever it appears in the tree, which follows aliases and merge keys.
+- **An alias entry's extent is its `*name` text** (`text.held_span` / `held_end`). Deleting an alias entry,
+  appending after one, and `owned_end` of a collection whose last entry is an alias all used to measure the
+  anchored node elsewhere in the file. `owned_end` of a mapping with a merge key measures the mapping as written.
+- **A new key named `<<` is written quoted**, so troupe never creates a merge key (README decision 47).
+- **VALUE still cannot contain anchors or aliases** (exit 2), as before. The loader no longer refuses them, so
+  `values.parse_value` checks for them itself.
+- An anchored empty scalar (`a: &x` with nothing after it) starts at its anchor's end, not on the next line.

@@ -9,7 +9,7 @@ scalars are printed, and how failures are reported through exit codes and messag
 
 ### Requirement: Invocation and theatre selection
 The CLI SHALL be invocable as `uv run troupe config <subcommand> [--theatre <dir>] [arguments]` from the repository
-root, with subcommands `get PATH`, `show [PATH] [--sources]`, `set PATH VALUE [--reason TEXT] [--in-include]`, `history [PATH]` and
+root, with subcommands `get PATH`, `show [PATH] [--sources]`, `set PATH VALUE [--reason TEXT] [--in-include] [--expand-alias]`, `history [PATH]` and
 `watch`. `--theatre` SHALL default to the current working directory.
 
 #### Scenario: Explicit theatre
@@ -21,7 +21,7 @@ root, with subcommands `get PATH`, `show [PATH] [--sources]`, `set PATH VALUE [-
 - **THEN** stdout is `x\n` and the exit code is 0
 
 #### Scenario: Unknown subcommand or missing argument
-- **WHEN** `troupe config frobnicate`, `troupe config get` (no PATH), `troupe config set model` (no VALUE), `troupe config set model b --reason` (no TEXT) or `troupe config set model b --in-include x` (an extra argument) is run
+- **WHEN** `troupe config frobnicate`, `troupe config get` (no PATH), `troupe config set model` (no VALUE), `troupe config set model b --reason` (no TEXT), `troupe config set model b --in-include x` (an extra argument) or `troupe config set model b --expand-alias x` (an extra argument) is run
 - **THEN** the exit code is 2, stdout is empty and stderr has a usage message
 
 #### Scenario: show takes an optional PATH
@@ -38,6 +38,10 @@ root, with subcommands `get PATH`, `show [PATH] [--sources]`, `set PATH VALUE [-
 
 #### Scenario: set takes an optional --in-include
 - **WHEN** `troupe config set a.x 1 --in-include` and `troupe config set --in-include a.y 2 --reason why` are run against a theatre that loads, with `a` a mapping
+- **THEN** each exits 0 and creates its key
+
+#### Scenario: set takes an optional --expand-alias
+- **WHEN** `troupe config set a.x 1 --expand-alias` and `troupe config set --expand-alias a.y 2 --reason why` are run against a theatre that loads, with `a` a mapping and no alias involved
 - **THEN** each exits 0 and creates its key
 
 ### Requirement: Path syntax
