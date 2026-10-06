@@ -2,6 +2,11 @@
 
 `build_tree` turns one file's text into nodes using the parser's events and marks. Scalars are resolved
 with the core schema in `troupe.schema`, not with the parser's own resolver.
+
+An alias is not a node of its own: the entry or item holding it records the `Alias`, and its value is the
+anchored node object itself, so every reader sees the anchored value. A node's span never includes its
+anchor (`&name`), so replacing the value keeps the anchor. A mapping with a merge key (`<<`) is resolved into
+the merged mapping, which keeps the mapping as written in `written`.
 """
 
 from collections.abc import Iterator
@@ -40,6 +45,15 @@ class Include:
 
 
 @dataclass(eq=False, kw_only=True)
+class Anchor:
+    """The `&name` written in front of a node: its name and where the text is."""
+
+    name: str
+    start: int
+    end: int
+
+
+@dataclass(eq=False, kw_only=True)
 class Node:
     file: SourceFile
     start: int
@@ -47,6 +61,18 @@ class Node:
     in_flow: bool  # the node sits inside a flow collection
     owner_col: int  # column of the key or `-` that owns this node (-1 for a document root)
     include: Include | None = None  # set on the root node of an included YAML file
+    anchor: Anchor | None = None  # the node's `&name`, outside its span
+
+
+@dataclass(eq=False, kw_only=True)
+class Alias:
+    """A `*name` written as an entry's or item's value; the value is then `target`, the anchored node."""
+
+    name: str
+    start: int
+    end: int
+    in_flow: bool  # the alias sits inside a flow collection
+    target: Node
 
 
 @dataclass(eq=False, kw_only=True)
@@ -71,6 +97,7 @@ class Entry:
     key: str
     key_node: ScalarNode
     value: Node
+    alias: Alias | None = None
 
 
 @dataclass(eq=False, kw_only=True)
@@ -80,6 +107,8 @@ class MappingNode(Node):
     # For a mapping merged from included content and overrides: the mappings as written, included first.
     # Empty for a mapping as written in one file.
     layers: list["MappingNode"] = field(default_factory=list)
+    # For a mapping with a merge key: the mapping as written (its own entries and the `<<` entry).
+    written: "MappingNode | None" = None
 
     def get(self, key: str) -> Entry | None:
         for entry in self.entries:
@@ -92,6 +121,7 @@ class MappingNode(Node):
 class Item:
     value: Node
     dash: int | None  # offset of the `-` for block sequences
+    alias: Alias | None = None
 
 
 @dataclass(eq=False, kw_only=True)
@@ -101,6 +131,20 @@ class SequenceNode(Node):
 
 
 INCLUDE_PREFIX = "file:"
+MERGE_KEY = "<<"
+
+
+def is_merge_key(key_node: ScalarNode) -> bool:
+    """Whether a key is a merge key: a plain, untagged `<<`."""
+    return key_node.style is None and not key_node.tagged and key_node.value == MERGE_KEY
+
+
+def merged_in(mapping: MappingNode, key: str) -> Entry | None:
+    """The `<<` entry if the mapping's value at `key` is supplied by a merge key, else None."""
+    written = mapping.written
+    if written is None or written.get(key) is not None or mapping.get(key) is None:
+        return None
+    return next(e for e in written.entries if is_merge_key(e.key_node))
 
 
 def include_target(node: ScalarNode) -> str | None:
@@ -146,6 +190,8 @@ class _Builder:
         self.src = src
         self.events = events
         self.peeked: Event | None = None
+        self.anchors: dict[str, Node] = {}  # the latest complete node with each anchor name
+        self.building: set[str] = set()  # anchor names of nodes still being built
 
     def next(self) -> Event:
         if self.peeked is not None:
@@ -176,17 +222,65 @@ class _Builder:
             assert isinstance(self.next(), DocumentEndEvent)
         return root
 
+    def value(self, *, in_flow: bool, owner_col: int) -> tuple[Node, Alias | None]:
+        """The next value, and the alias it was written as (None for a node written in place)."""
+        event = self.peek()
+        if not isinstance(event, AliasEvent):
+            return self.node(in_flow=in_flow, owner_col=owner_col), None
+        self.next()
+        name = str(event.anchor)
+        target = self.anchors.get(name)
+        if target is None:
+            inside = name in self.building
+            problem = "is inside the node it refers to" if inside else "has no anchor before it"
+            raise self.fail(event, f"alias *{name} {problem}")
+        alias = Alias(
+            name=name, start=event.start_mark.index, end=event.end_mark.index, in_flow=in_flow, target=target
+        )
+        return target, alias
+
     def node(self, *, in_flow: bool, owner_col: int) -> Node:
         event = self.next()
-        if isinstance(event, AliasEvent) or getattr(event, "anchor", None) is not None:
-            raise self.fail(event, "anchors and aliases are not supported")
+        if isinstance(event, AliasEvent):
+            raise self.fail(event, f"unexpected alias *{event.anchor}")
+        name: str | None = getattr(event, "anchor", None)
+        if name is not None:
+            self.building.add(name)
+        node: Node
         if isinstance(event, ScalarEvent):
-            return self.scalar(event, in_flow=in_flow, owner_col=owner_col)
-        if isinstance(event, MappingStartEvent):
-            return self.mapping(event, in_flow=in_flow, owner_col=owner_col)
-        if isinstance(event, SequenceStartEvent):
-            return self.sequence(event, in_flow=in_flow, owner_col=owner_col)
-        raise self.fail(event, f"unexpected {type(event).__name__}")
+            node = self.scalar(event, in_flow=in_flow, owner_col=owner_col)
+        elif isinstance(event, MappingStartEvent):
+            node = self.mapping(event, in_flow=in_flow, owner_col=owner_col)
+        elif isinstance(event, SequenceStartEvent):
+            node = self.sequence(event, in_flow=in_flow, owner_col=owner_col)
+        else:
+            raise self.fail(event, f"unexpected {type(event).__name__}")
+        if name is not None:
+            self.building.discard(name)
+            self.anchors[name] = node
+        return node
+
+    def anchor_of(self, event: Event) -> Anchor | None:
+        name: str | None = getattr(event, "anchor", None)
+        if name is None:
+            return None
+        start = self.src.text.find("&" + name, event.start_mark.index)
+        assert start >= 0, name
+        return Anchor(name=name, start=start, end=start + 1 + len(name))
+
+    def after_anchor(self, anchor: Anchor) -> int:
+        """The offset where the anchored node's own text starts: past spaces, comments and line breaks."""
+        text = self.src.text
+        pos = anchor.end
+        while pos < len(text):
+            ch = text[pos]
+            if ch in " \t\r\n":
+                pos += 1
+            elif ch == "#":
+                pos = self.src.next_line(pos)
+            else:
+                break
+        return pos
 
     def scalar(self, event: ScalarEvent, *, in_flow: bool, owner_col: int) -> ScalarNode:
         style = event.style or None
@@ -204,6 +298,9 @@ class _Builder:
             except ValueError as e:
                 raise self.fail(event, str(e)) from None
         start, end = event.start_mark.index, event.end_mark.index
+        anchor = self.anchor_of(event)
+        if anchor is not None and anchor.start == start:
+            start = self.after_anchor(anchor)  # a tag before the anchor stays in the (never rewritten) span
         node = ScalarNode(
             file=self.src,
             start=start,
@@ -213,6 +310,7 @@ class _Builder:
             value=value,
             style=style,
             tagged=tagged,
+            anchor=anchor,
         )
         if style in ("|", ">"):
             layout = parse_block(self.src, start, owner_col)
@@ -228,16 +326,22 @@ class _Builder:
     def mapping(self, event: MappingStartEvent, *, in_flow: bool, owner_col: int) -> MappingNode:
         self.collection_tag_ok(event, "map")
         flow = bool(event.flow_style)
+        anchor = self.anchor_of(event)
+        start = self.after_anchor(anchor) if anchor is not None else event.start_mark.index
         node = MappingNode(
             file=self.src,
-            start=event.start_mark.index,
-            end=event.start_mark.index,
+            start=start,
+            end=start,
             in_flow=in_flow,
             owner_col=owner_col,
             flow_style=flow,
+            anchor=anchor,
         )
+        merges: list[tuple[Entry, list[MappingNode]]] = []
         while not isinstance(self.peek(), MappingEndEvent):
             key_event = self.peek()
+            if isinstance(key_event, AliasEvent) or getattr(key_event, "anchor", None) is not None:
+                raise self.fail(key_event, "anchors and aliases cannot be mapping keys")
             if not isinstance(key_event, ScalarEvent):
                 raise self.fail(key_event, "only scalar mapping keys are supported")
             key_node = self.node(in_flow=in_flow or flow, owner_col=owner_col)
@@ -245,20 +349,33 @@ class _Builder:
             key = key_text(key_node.value)
             if node.get(key) is not None:
                 raise self.fail(key_event, f"duplicate key {key!r}")
-            value = self.node(in_flow=in_flow or flow, owner_col=self.src.column(key_node.start))
-            node.entries.append(Entry(key=key, key_node=key_node, value=value))
-            node.end = max(value.end, key_node.end)
+            value_event = self.peek()
+            value, alias = self.value(in_flow=in_flow or flow, owner_col=self.src.column(key_node.start))
+            entry = Entry(key=key, key_node=key_node, value=value, alias=alias)
+            node.entries.append(entry)
+            node.end = max(alias.end if alias is not None else value.end, key_node.end)
+            if is_merge_key(key_node):
+                merges.append((entry, self.merge_sources(value_event, value)))
         end_event = self.next()
         if flow:
             node.end = end_event.end_mark.index
         elif node.entries:
             node.start = node.entries[0].key_node.start
-        return node
+        return node if not merges else _resolve_merges(node, merges)
+
+    def merge_sources(self, event: Event, value: Node) -> list[MappingNode]:
+        """The mappings a merge key's value names: a mapping, or a list of mappings."""
+        if isinstance(value, MappingNode):
+            return [value]
+        if isinstance(value, SequenceNode) and all(isinstance(i.value, MappingNode) for i in value.items):
+            return [i.value for i in value.items if isinstance(i.value, MappingNode)]
+        raise self.fail(event, f"the value of merge key {MERGE_KEY} must be a mapping or a list of mappings")
 
     def sequence(self, event: SequenceStartEvent, *, in_flow: bool, owner_col: int) -> SequenceNode:
         self.collection_tag_ok(event, "seq")
         flow = bool(event.flow_style)
-        start = event.start_mark.index
+        anchor = self.anchor_of(event)
+        start = self.after_anchor(anchor) if anchor is not None else event.start_mark.index
         node = SequenceNode(
             file=self.src,
             start=start,
@@ -266,6 +383,7 @@ class _Builder:
             in_flow=in_flow,
             owner_col=owner_col,
             flow_style=flow,
+            anchor=anchor,
         )
         dash_col = self.src.column(start)
         prev_end = start
@@ -278,9 +396,10 @@ class _Builder:
                     else self.find_dash(prev_end, self.peek().start_mark.index, dash_col)
                 )
             col = self.src.column(dash) if dash is not None else owner_col
-            value = self.node(in_flow=in_flow or flow, owner_col=col)
-            node.items.append(Item(value=value, dash=dash))
-            prev_end = node.end = max(value.end, dash + 1 if dash is not None else value.end)
+            value, alias = self.value(in_flow=in_flow or flow, owner_col=col)
+            value_end = alias.end if alias is not None else value.end
+            node.items.append(Item(value=value, dash=dash, alias=alias))
+            prev_end = node.end = max(value_end, dash + 1 if dash is not None else value_end)
         end_event = self.next()
         if flow:
             node.end = end_event.end_mark.index
@@ -298,3 +417,34 @@ class _Builder:
                 return pos
             pos -= 1
         raise LoadError(f"{self.src.path}: cannot locate a sequence entry before offset {hi}")
+
+
+def _resolve_merges(written: MappingNode, merges: list[tuple[Entry, list[MappingNode]]]) -> MappingNode:
+    """The mapping `written` with its merge keys applied.
+
+    Its own keys win, then earlier merge sources. Merged-in entries take the `<<` entry's position.
+    """
+    own = {e.key for e in written.entries if not is_merge_key(e.key_node)}
+    sources = {id(entry): mappings for entry, mappings in merges}
+    seen: set[str] = set()
+    entries: list[Entry] = []
+    for entry in written.entries:
+        if id(entry) not in sources:
+            entries.append(entry)
+            continue
+        for mapping in sources[id(entry)]:
+            for merged in mapping.entries:
+                if merged.key not in own and merged.key not in seen:
+                    seen.add(merged.key)
+                    entries.append(merged)
+    return MappingNode(
+        file=written.file,
+        start=written.start,
+        end=written.end,
+        in_flow=written.in_flow,
+        owner_col=written.owner_col,
+        flow_style=written.flow_style,
+        anchor=written.anchor,
+        entries=entries,
+        written=written,
+    )

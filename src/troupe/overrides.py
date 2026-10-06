@@ -42,7 +42,8 @@ def merge(base: MappingNode, override: MappingNode, entries: list[Entry]) -> Map
             value = merge(entry.value, over.value, over.value.entries)
             # The nearest include wins: an included override value, else an included base value.
             value.include = over.value.include or entry.value.include
-            merged_entries.append(Entry(key=entry.key, key_node=entry.key_node, value=value))
+            alias = entry.alias or over.alias  # a write below either side would go through it
+            merged_entries.append(Entry(key=entry.key, key_node=entry.key_node, value=value, alias=alias))
         else:
             merged_entries.append(over)
     merged_entries.extend(by_key.values())

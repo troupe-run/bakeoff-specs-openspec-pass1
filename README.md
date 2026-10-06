@@ -186,6 +186,24 @@ cat /tmp/demo/.troupe/agents/coder.yaml
 Mapping-form includes need step 5 or later. Older code reads `$ref` as an ordinary key, so going back means
 rewriting them as one-line includes (and moving the overrides into the shared file) by hand.
 
+### Anchors and aliases
+
+A value can be shared within one file with a YAML anchor (`&name`) and aliases (`*name`) to it. An alias has the value
+of the node anchored with that name earlier in the same file. A merge key (`<<`, plain) adds the entries of the
+mapping (or list of mappings) it names to the mapping that holds it. That mapping's own keys win, then earlier
+mappings in the list. `get`, `show`, `history` and reconciling all see the resolved values, and `show --sources` names
+the file the anchor is written in.
+
+```sh
+printf 'defaults: &d\n  model: opus\ncoder:\n  settings: *d\nreviewer:\n  <<: *d\n  temperature: 0.2\n' > /tmp/demo/.troupe/troupe.yml
+uv run troupe config get coder.settings.model --theatre /tmp/demo   # opus
+uv run troupe config show reviewer --theatre /tmp/demo              # model: opus / temperature: 0.2
+```
+
+Anchors do not cross files: an alias cannot refer to an anchor in a file it includes, or one that includes it. An
+alias with no anchor before it (or inside the node it refers to), an anchor or alias used as a key, and a merge key
+whose value is not a mapping or list of mappings written in that file all fail to load (exit 4).
+
 ### Exit codes
 
 | Code | Meaning |
@@ -193,7 +211,7 @@ rewriting them as one-line includes (and moving the overrides into the shared fi
 | 0 | success |
 | 2 | usage error (bad arguments, path syntax, VALUE or `TROUPE_ACTOR`) |
 | 3 | write refused, so no file changed |
-| 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, include cycle, overrides on a text include or on included content that is not a mapping) |
+| 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, include cycle, overrides on a text include or on included content that is not a mapping, an alias without an anchor before it, a merge key that names no mapping) |
 | 5 | path not found, or the wrong kind of node for the command |
 
 On failure stdout is empty and stderr names the path or file involved.
@@ -227,7 +245,8 @@ and `openspec/changes/archive/2026-10-05-config-set-in-include/design.md`:
    `history`), and its events are kept even if the command then fails with exit 3 or 5.
 7. `history PATH` with no matches prints nothing and exits 0. `.inf`/`.nan` appear in JSON as the strings `".inf"`,
    `"-.inf"` and `".nan"`.
-8. Anchors, aliases and non-core tags fail to load (exit 4) for now.
+8. Non-core tags fail to load (exit 4). Anchors, aliases and merge keys load: see
+   [Anchors and aliases](#anchors-and-aliases).
 9. A new key that would read back as a non-string when written plain (e.g. `true`) is quoted.
 10. Every `set` is verified before writing: the edited text is re-read and must give exactly the intended
     configuration, otherwise nothing is written (exit 3).

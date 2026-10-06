@@ -17,7 +17,19 @@ def parse_value(text: str) -> Data:
         return None
     if not _is_flow(root):
         raise UsageError(f"invalid VALUE {text!r}: must be a single flow node (quote it to make a string)")
+    if _has_anchor(root):
+        raise UsageError(f"invalid VALUE {text!r}: anchors (&) and aliases (*) cannot be written")
     return to_data(root)
+
+
+def _has_anchor(node: Node) -> bool:
+    if node.anchor is not None:
+        return True
+    if isinstance(node, MappingNode):
+        return any(e.alias is not None or _has_anchor(e.value) for e in node.entries)
+    if isinstance(node, SequenceNode):
+        return any(i.alias is not None or _has_anchor(i.value) for i in node.items)
+    return False
 
 
 def _is_flow(node: Node) -> bool:

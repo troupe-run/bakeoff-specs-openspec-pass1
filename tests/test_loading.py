@@ -125,11 +125,6 @@ def test_same_file_included_twice_is_not_a_cycle(theatre: Theatre) -> None:
     assert theatre.run("show", "b.x").out == "1\n"
 
 
-def test_anchors_are_refused_at_load(make: Callable[[str], Theatre]) -> None:
-    t = make("a: &x 1\nb: *x\n")
-    assert t.run("show", "a").code == 4
-
-
 def test_duplicate_keys_are_refused_at_load(make: Callable[[str], Theatre]) -> None:
     assert make("a: 1\na: 2\n").run("show", "a").code == 4
 

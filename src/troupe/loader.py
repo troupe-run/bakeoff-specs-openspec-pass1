@@ -67,6 +67,8 @@ class _Loader:
     def __init__(self, overlay: Mapping[Path, str]) -> None:
         self.overlay = overlay
         self.files: dict[Path, SourceFile] = {}
+        # Each node expanded so far, by identity: a node reached again through an alias is expanded once.
+        self.expanded: dict[int, Node] = {}
 
     def read(self, path: Path) -> SourceFile:
         key = path.resolve()
@@ -80,6 +82,12 @@ class _Loader:
         return src
 
     def expand(self, node: Node, base: Path, stack: tuple[Path, ...]) -> Node:
+        done = self.expanded.get(id(node))
+        if done is None:
+            done = self.expanded[id(node)] = self._expand(node, base, stack)
+        return done
+
+    def _expand(self, node: Node, base: Path, stack: tuple[Path, ...]) -> Node:
         match node:
             case ScalarNode():
                 target = include_target(node)

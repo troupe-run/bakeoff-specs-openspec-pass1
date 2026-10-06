@@ -41,7 +41,9 @@ def test_values_parse_as_one_yaml_1_2_flow_node(text: str, expected: Data) -> No
     assert same(parse_value(text), expected)
 
 
-@pytest.mark.parametrize("text", ["[a, b", "a: b: c", "a: b", "- a", "|\n  x\n", "{a: 1", "&x a", "*x"])
+@pytest.mark.parametrize(
+    "text", ["[a, b", "a: b: c", "a: b", "- a", "|\n  x\n", "{a: 1", "&x a", "*x", "[&x a, *x]"]
+)
 def test_values_that_are_not_a_single_flow_node_are_usage_errors(text: str) -> None:
     with pytest.raises(UsageError, match="invalid VALUE"):
         parse_value(text)
