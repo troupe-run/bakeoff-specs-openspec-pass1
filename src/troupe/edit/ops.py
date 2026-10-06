@@ -47,10 +47,17 @@ class Slot:
 
     @property
     def indicator_end(self) -> int:
+        """Where text written right after the `key:` or `-` goes: past the node's anchor if it is there."""
         if self.entry is not None:
-            return indicator_end(self.node.file, self.entry.key_node.end)
-        assert self.item is not None and self.item.dash is not None
-        return self.item.dash + 1
+            end = indicator_end(self.node.file, self.entry.key_node.end)
+        else:
+            assert self.item is not None and self.item.dash is not None
+            end = self.item.dash + 1
+        anchor = self.node.anchor
+        src = self.node.file
+        if anchor is not None and anchor.start >= end and src.line_start(anchor.start) == src.line_start(end):
+            return anchor.end
+        return end
 
 
 type FileEdits = tuple[SourceFile, list[Edit]]

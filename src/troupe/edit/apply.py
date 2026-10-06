@@ -34,13 +34,13 @@ def compute_set(
     operations = plan(config.root, path, value, in_include=in_include)
     original = {key: src.text for key, src in config.files.items()}
     texts = dict(original)
+    expected = _expected(config.root, path, value)
     current = config
     for op in operations:
         _apply(current, op, texts)
         current = _reload(theatre, texts, path)
     if texts == original:
         return SetResult({}, [])
-    expected = _with_value(to_data(config.root), path, value)
     if not _matches(current.root, expected):
         raise WriteRefused(
             f"{format_path(path)}: the edited files would not read back as intended; not writing"
@@ -196,6 +196,32 @@ def _node_at(root: Node, path: Path) -> Node:
             assert isinstance(node, SequenceNode), segment
             node = node.items[int(segment)].value
     return node
+
+
+def _expected(root: Node, path: Path, value: Data) -> Data:
+    """The configuration once `value` is at `path`: wherever the changed node appears, through an alias or
+    a merge key as well (an alias's value is the anchored node object itself), it has the new value."""
+    target, depth = root, 0
+    for segment in path:
+        if isinstance(target, MappingNode) and (entry := target.get(segment)) is not None:
+            target = entry.value
+        elif isinstance(target, SequenceNode) and segment.isdigit() and int(segment) < len(target.items):
+            target = target.items[int(segment)].value
+        else:
+            break
+        depth += 1
+    changed = _with_value(to_data(target), path[depth:], value)
+
+    def build(node: Node) -> Data:
+        if node is target:
+            return changed
+        if isinstance(node, MappingNode):
+            return {e.key: build(e.value) for e in node.entries}
+        if isinstance(node, SequenceNode):
+            return [build(i.value) for i in node.items]
+        return to_data(node)
+
+    return build(root)
 
 
 def _with_value(data: Data, path: Path, value: Data) -> Data:

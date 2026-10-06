@@ -10,8 +10,8 @@
 
 ## 2. Setting values defined at an anchor
 
-- [ ] 2.1 Make `Slot.indicator_end` in `edit/ops.py` return the end of the node's anchor when that anchor is on the indicator's line, so block-collection and empty-value replacements keep `&name` (D6). Verify `uv run mypy` and the existing suite stay clean
-- [ ] 2.2 Add `tests/test_set_anchors.py` with byte-exact file checks for every "Setting a value defined at an anchor" scenario: the issue's `defaults.model` (three events sharing one change id), anchored scalar, anchored scalar replaced by a list, and deleting a still-used anchor exiting 3 with the file unchanged. Add a quoted anchored scalar (`a: &x "q"`), an anchored flow mapping, and an anchored block mapping replaced by a scalar (`a: &x 5`). Verify they pass, and that the replaced-by-list and replaced-by-scalar tests fail if `indicator_end` ignores the anchor
+- [x] 2.1 Make `Slot.indicator_end` in `edit/ops.py` return the end of the node's anchor when that anchor is on the indicator's line, so block-collection and empty-value replacements keep `&name` (D6). Verify `uv run mypy` and the existing suite stay clean
+- [x] 2.2 Add `tests/test_set_anchors.py` with byte-exact file checks for every "Setting a value defined at an anchor" scenario: the issue's `defaults.model` (three events sharing one change id), anchored scalar, anchored scalar replaced by a list, and deleting a still-used anchor exiting 3 with the file unchanged. Add a quoted anchored scalar (`a: &x "q"`), an anchored flow mapping, and an anchored block mapping replaced by a scalar (`a: &x 5`). Verify they pass, and that the replaced-by-scalar and anchored-null tests fail if `indicator_end` ignores the anchor (replaced-by-list goes through the inline replace, which keeps the anchor by its span alone). Also compute the read-back check's expected value by node identity (`apply._expected`), so aliases and merges of the changed node are expected to change with it
 
 ## 3. Refusing to set through an alias
 

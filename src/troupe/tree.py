@@ -300,7 +300,8 @@ class _Builder:
         start, end = event.start_mark.index, event.end_mark.index
         anchor = self.anchor_of(event)
         if anchor is not None and anchor.start == start:
-            start = self.after_anchor(anchor)  # a tag before the anchor stays in the (never rewritten) span
+            # A tag before the anchor stays in the (never rewritten) span; an empty scalar ends at its anchor.
+            start = min(self.after_anchor(anchor), end)
         node = ScalarNode(
             file=self.src,
             start=start,
