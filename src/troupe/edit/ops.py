@@ -23,6 +23,8 @@ from troupe.edit.text import (
     Edit,
     Layout,
     detect_layout,
+    held_end,
+    held_span,
     indicator_end,
     inline_edit,
     insert_lines,
@@ -216,10 +218,10 @@ def add_key(mapping: MappingNode, key: str, value: Data) -> FileEdits:
     src = mapping.file
     last = mapping.entries[-1] if mapping.entries else None
     key_style = _scalar_style(last.key_node) if last else None
-    value_style = _scalar_style(last.value) if last else None
+    value_style = _scalar_style(last.value) if last and last.alias is None else None
     if mapping.flow_style:
         entry = f"{render_key(key, key_style, flow=True)}: {flow_text(value, value_style, flow=True)}"
-        return src, [_flow_append(mapping, last.value.end if last else None, entry)]
+        return src, [_flow_append(mapping, held_span(last)[1] if last else None, entry)]
     layout = detect_layout(src)
     if last is None:
         col, pos = 0, len(src.text)
@@ -266,9 +268,10 @@ def to_mapping_form(string: ScalarNode, key: Entry | None, entries: dict[str, Da
 def append_item(seq: SequenceNode, value: Data) -> FileEdits:
     src = seq.file
     last = seq.items[-1] if seq.items else None
-    style = _scalar_style(last.value) if last else None
+    style = _scalar_style(last.value) if last and last.alias is None else None
     if seq.flow_style:
-        return src, [_flow_append(seq, last.value.end if last else None, flow_text(value, style, flow=True))]
+        last_end = held_span(last)[1] if last else None
+        return src, [_flow_append(seq, last_end, flow_text(value, style, flow=True))]
     assert last is not None and last.dash is not None
     layout = detect_layout(src)
     col = src.column(last.dash)
@@ -289,9 +292,9 @@ def delete(parent: MappingNode | SequenceNode, index: int, where: str) -> FileEd
     src = parent.file
     if parent.flow_style:
         spans = (
-            [(e.key_node.start, max(e.value.end, e.key_node.end)) for e in parent.entries]
+            [(e.key_node.start, max(held_span(e)[1], e.key_node.end)) for e in parent.entries]
             if isinstance(parent, MappingNode)
-            else [(i.value.start, i.value.end) for i in parent.items]
+            else [held_span(i) for i in parent.items]
         )
         start, end = spans[index]
         if index > 0:
@@ -302,12 +305,10 @@ def delete(parent: MappingNode | SequenceNode, index: int, where: str) -> FileEd
     starts = (
         [e.key_node.start for e in parent.entries]
         if isinstance(parent, MappingNode)
-        else [i.dash if i.dash is not None else i.value.start for i in parent.items]
+        else [i.dash if i.dash is not None else held_span(i)[0] for i in parent.items]
     )
-    if isinstance(parent, MappingNode):
-        end = owned_end(parent.entries[index].value)
-    else:
-        end = owned_end(parent.items[index].value)
+    holder: Entry | Item = parent.entries[index] if isinstance(parent, MappingNode) else parent.items[index]
+    end = held_end(holder)
     first = starts[index]
     line_start = src.line_start(first)
     if src.text[line_start:first].strip(" ") == "":

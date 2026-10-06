@@ -204,6 +204,22 @@ Anchors do not cross files: an alias cannot refer to an anchor in a file it incl
 alias with no anchor before it (or inside the node it refers to), an anchor or alias used as a key, and a merge key
 whose value is not a mapping or list of mappings written in that file all fail to load (exit 4).
 
+Setting a value **at the anchor** changes it there, keeping the `&name`, so every alias sees the new value. History
+records an event for each path whose value changed. Setting a value **through an alias** would do the same thing
+without your saying so, so it is refused (exit 3) and nothing changes:
+
+```sh
+printf 'defaults: &d\n  model: opus\ncoder:\n  settings: *d\nreviewer:\n  settings: *d\n' > /tmp/demo/.troupe/troupe.yml
+uv run troupe config set defaults.model sonnet --theatre /tmp/demo        # coder and reviewer now use sonnet too
+uv run troupe config set coder.settings.model haiku --theatre /tmp/demo   # exit 3:
+# troupe: coder.settings.model: coder.settings is the alias *d of &d at defaults, so this would change all its
+# uses. Set defaults.model to change it everywhere, or use --expand-alias to give coder.settings a copy
+```
+
+This covers a mapping or list VALUE that would change anything under an alias, and a new key below one. Removing an
+entry whose value is an alias is fine, since it changes nothing else. Deleting an anchor that an alias still uses is
+refused (exit 3).
+
 ### Exit codes
 
 | Code | Meaning |

@@ -2,16 +2,17 @@
 
 When the existing value and VALUE are both mappings (or both lists) only their differences become
 operations, so unchanged entries keep their bytes. YAML include roots are never rewritten: changing or
-deleting one is refused.
+deleting one is refused. Nothing is written through an alias (`*name`), since that would change the anchor
+and every other use of it: such a set raises `ThroughAlias`, naming the alias.
 """
 
 from dataclasses import dataclass
 
-from troupe.errors import PathError, WriteRefused
+from troupe.errors import PathError, ThroughAlias, WriteRefused
 from troupe.overrides import is_bare
 from troupe.paths import Path, format_path, is_index
 from troupe.schema import Data, same
-from troupe.tree import MappingNode, Node, ScalarNode, SequenceNode, TextNode, to_data
+from troupe.tree import Alias, MappingNode, Node, ScalarNode, SequenceNode, TextNode, to_data
 
 
 @dataclass(frozen=True)
@@ -65,6 +66,9 @@ def describe(node: Node) -> str:
 
 def plan(root: Node, path: Path, value: Data, *, in_include: bool = False) -> list[Op]:
     """Operations that make the value at `path` equal `value`. Raises PathError / WriteRefused."""
+    existing = _existing(root, path)
+    if existing is not None and same(to_data(existing), value):
+        return []  # nothing changes, even through an alias
     node: Node = root
     for i, segment in enumerate(path):
         here = path[: i + 1]
@@ -75,13 +79,18 @@ def plan(root: Node, path: Path, value: Data, *, in_include: bool = False) -> li
                 if any(is_index(s) for s in path[i:]):
                     raise PathError(f"{format_path(path)}: not found ({format_path(here)} does not exist)")
                 return [new_key_target(root, here, nest(rest, value), in_include=in_include)]
+            if entry.alias is not None:
+                raise through_alias(root, path, here, entry.alias)
             node = entry.value
         elif isinstance(node, SequenceNode):
             if not is_index(segment):
                 raise PathError(f"{format_path(path)}: {format_path(path[:i]) or 'the root'} is a list")
             index = int(segment)
             if index < len(node.items):
-                node = node.items[index].value
+                item = node.items[index]
+                if item.alias is not None:
+                    raise through_alias(root, path, here, item.alias)
+                node = item.value
             elif index == len(node.items) and not rest:
                 return [Append(here, value)]
             else:
@@ -93,8 +102,55 @@ def plan(root: Node, path: Path, value: Data, *, in_include: bool = False) -> li
                 f"{format_path(path)}: {format_path(path[:i])} is a scalar, not a mapping or list"
             )
     ops: list[Op] = []
-    _diff(root, node, value, path, ops, in_include)
+    _diff(root, node, value, path, ops, in_include, path)
     return ops
+
+
+def _existing(root: Node, path: Path) -> Node | None:
+    """The node at `path`, or None if there is none."""
+    node = root
+    for segment in path:
+        if isinstance(node, MappingNode) and (entry := node.get(segment)) is not None:
+            node = entry.value
+        elif isinstance(node, SequenceNode) and is_index(segment) and int(segment) < len(node.items):
+            node = node.items[int(segment)].value
+        else:
+            return None
+    return node
+
+
+def through_alias(root: Node, path: Path, alias_path: Path, alias: Alias) -> ThroughAlias:
+    """The refusal for a `set` of `path` that would write through `alias`, written at `alias_path`."""
+    anchor = anchor_path(root, alias.target)
+    rest = path[len(alias_path) :]
+    return ThroughAlias(
+        format_path(path),
+        format_path(alias_path),
+        alias.name,
+        format_path(anchor) if anchor is not None else None,
+        format_path((*anchor, *rest)) if anchor is not None else None,
+        in_flow=alias.in_flow,
+    )
+
+
+def anchor_path(root: Node, target: Node) -> Path | None:
+    """The path at which `target` is written (not reached through an alias or a merge key), if any."""
+    stack: list[tuple[Node, Path]] = [(root, ())]
+    while stack:
+        node, path = stack.pop()
+        if node is target:
+            return path
+        children: list[tuple[Node, Path]] = []
+        if isinstance(node, MappingNode):
+            children = [
+                (e.value, (*path, e.key))
+                for e in node.entries
+                if e.alias is None and (node.written is None or node.written.get(e.key) is e)
+            ]
+        elif isinstance(node, SequenceNode):
+            children = [(i.value, (*path, str(n))) for n, i in enumerate(node.items) if i.alias is None]
+        stack.extend(reversed(children))
+    return None
 
 
 def new_key_target(root: Node, path: Path, value: Data, *, in_include: bool = False) -> Op:
@@ -136,15 +192,21 @@ def _check_no_includes(node: Node, path: Path) -> None:
         raise WriteRefused(
             f"{format_path(path)}: its value comes from {node.include.target}; not replacing it"
         )
+    # Below an alias nothing is rewritten: only the `*name` text goes.
     if isinstance(node, MappingNode):
         for entry in node.entries:
-            _check_no_includes(entry.value, (*path, entry.key))
+            if entry.alias is None:
+                _check_no_includes(entry.value, (*path, entry.key))
     elif isinstance(node, SequenceNode):
         for index, item in enumerate(node.items):
-            _check_no_includes(item.value, (*path, str(index)))
+            if item.alias is None:
+                _check_no_includes(item.value, (*path, str(index)))
 
 
-def _diff(root: Node, node: Node, value: Data, path: Path, ops: list[Op], in_include: bool) -> None:
+def _diff(
+    root: Node, node: Node, value: Data, path: Path, ops: list[Op], in_include: bool, top: Path
+) -> None:
+    """Add the operations that turn `node` (at `path`) into `value`; `top` is the PATH being set."""
     where = format_path(path)
     include = node.include
     if include is not None and is_bare(include, value):
@@ -170,13 +232,19 @@ def _diff(root: Node, node: Node, value: Data, path: Path, ops: list[Op], in_inc
             existing = node.get(key)
             if existing is None:
                 adds.append(new_key_target(root, (*path, key), child, in_include=in_include))
+            elif existing.alias is not None:
+                if not same(to_data(existing.value), child):
+                    raise through_alias(root, top, (*path, key), existing.alias)
             else:
-                _diff(root, existing.value, child, (*path, key), ops, in_include)
+                _diff(root, existing.value, child, (*path, key), ops, in_include, top)
         ops.extend(adds + deletes)
         return
     if isinstance(node, SequenceNode) and isinstance(value, list) and (value or not node.items):
         for index, (item, child) in enumerate(zip(node.items, value, strict=False)):
-            _diff(root, item.value, child, (*path, str(index)), ops, in_include)
+            if item.alias is None:
+                _diff(root, item.value, child, (*path, str(index)), ops, in_include, top)
+            elif not same(to_data(item.value), child):
+                raise through_alias(root, top, (*path, str(index)), item.alias)
         for index in range(len(node.items), len(value)):
             ops.append(Append((*path, str(index)), value[index]))
         for index in reversed(range(len(value), len(node.items))):

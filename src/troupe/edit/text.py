@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from itertools import pairwise
 
 from troupe.source import SourceFile
-from troupe.tree import MappingNode, Node, ScalarNode, SequenceNode, build_tree
+from troupe.tree import Entry, Item, MappingNode, Node, ScalarNode, SequenceNode, build_tree
 
 DEFAULT_INDENT = 2
 
@@ -123,10 +123,22 @@ def owned_end(node: Node) -> int:
     if isinstance(node, ScalarNode) and node.block is not None and node.block.chomp == "+":
         return max(node.end, node.block.region_end - 1)
     if isinstance(node, MappingNode) and not node.flow_style and node.entries:
-        return max(owned_end(node.entries[-1].value), node.entries[-1].key_node.end)
+        return max(held_end(node.entries[-1]), node.entries[-1].key_node.end)
     if isinstance(node, SequenceNode) and not node.flow_style and node.items:
-        return max(owned_end(node.items[-1].value), node.end)
+        return max(held_end(node.items[-1]), node.end)
     return node.end
+
+
+def held_span(holder: Entry | Item) -> tuple[int, int]:
+    """Where an entry's or item's value is written; for an alias, its `*name` (the value is elsewhere)."""
+    if holder.alias is not None:
+        return holder.alias.start, holder.alias.end
+    return holder.value.start, holder.value.end
+
+
+def held_end(holder: Entry | Item) -> int:
+    """The last offset belonging to an entry's or item's value as written there."""
+    return holder.alias.end if holder.alias is not None else owned_end(holder.value)
 
 
 def insertion_point(src: SourceFile, last_end: int, col: int) -> int:
