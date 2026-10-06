@@ -9,6 +9,7 @@ from troupe.blockscalar import BlockLayout
 from troupe.edit.blocks import (
     Rendered,
     block_ok,
+    copy_value,
     entry_lines,
     flow_text,
     item_lines,
@@ -22,6 +23,7 @@ from troupe.edit.scalars import QUOTE_STYLES, double, render_key
 from troupe.edit.text import (
     Edit,
     Layout,
+    comment_start,
     detect_layout,
     held_end,
     held_span,
@@ -318,3 +320,53 @@ def delete(parent: MappingNode | SequenceNode, index: int, where: str) -> FileEd
         # its place, which sits at the same column.
         return src, [Edit(first, starts[1], "")]
     raise WriteRefused(f"{where}: cannot delete an entry that shares its line with another")
+
+
+EXPANDED_COMMENT = "# expanded from *{name} by troupe"
+
+
+def expand_alias(
+    parent: MappingNode | SequenceNode, holder: Entry | Item, copy: Node, where: str
+) -> FileEdits:
+    """Replace the alias that is `holder`'s value with a block-style copy of `copy`, its anchored node as written.
+
+    The `*name` goes, and the end-of-line comment `EXPANDED_COMMENT` is put on the key's (or dash's) line, two
+    spaces after whatever ends it. A scalar copy takes the alias's place; a collection copy follows that line.
+    """
+    alias = holder.alias
+    assert alias is not None and not alias.in_flow, where
+    src = parent.file
+    if isinstance(holder, Entry):
+        owner = holder.key_node.start
+    else:
+        assert holder.dash is not None, where
+        owner = holder.dash
+    r = copy_value(
+        copy, owner_col=src.column(owner), owner_is_key=isinstance(holder, Entry), layout=detect_layout(src)
+    )
+    marker = "  " + EXPANDED_COMMENT.format(name=alias.name)
+    owner_end = src.line_end(owner)
+    edits: list[Edit] = []
+    if src.line_start(alias.start) == src.line_start(owner):
+        commented = comment_start(src, alias.end) is not None
+        if r.inline and commented:
+            edits += [inline_edit(src, alias.start, alias.end, r.inline), Edit(owner_end, owner_end, marker)]
+        elif r.inline:
+            edits.append(Edit(alias.start, owner_end, r.inline + marker))
+        elif commented:  # the comment keeps its bytes, and so does the whitespace before it
+            edits += [Edit(_ws_start(src, alias.start), alias.end, ""), Edit(owner_end, owner_end, marker)]
+        else:
+            edits.append(Edit(_ws_start(src, alias.start), owner_end, marker))
+    else:
+        if src.line_text(alias.start).strip(" \t") != src.text[alias.start : alias.end]:
+            raise WriteRefused(
+                f"{where}: cannot expand *{alias.name}: it shares its line with something else"
+            )
+        edits.append(Edit(owner_end, owner_end, marker))
+        if r.inline:
+            edits.append(Edit(alias.start, alias.end, r.inline))
+        else:
+            edits.append(Edit(src.line_start(alias.start), src.next_line(alias.start), ""))
+    if r.lines:
+        edits.append(insert_lines(src, src.next_line(alias.end), r.lines))
+    return src, edits

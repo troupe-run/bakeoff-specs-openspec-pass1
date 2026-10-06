@@ -8,7 +8,7 @@ from troupe.edit.text import Layout
 from troupe.errors import LoadError
 from troupe.schema import Data
 from troupe.source import SourceFile
-from troupe.tree import MappingNode, build_tree
+from troupe.tree import Entry, Item, MappingNode, Node, ScalarNode, SequenceNode, build_tree
 
 
 @dataclass
@@ -143,4 +143,65 @@ def item_lines(value: Data, col: int, layout: Layout, *, value_style: str | None
         )
         return [" " * col + "- " + inner[0][col + 2 :], *inner[1:]]
     r = render_value(value, owner_col=col, owner_is_key=False, layout=layout, preferred=value_style)
+    return [" " * col + "-" + (" " + r.inline if r.inline else ""), *r.lines]
+
+
+# --- copies of anchored nodes (`set --expand-alias`) -------------------------------------------------------
+
+
+def copy_value(node: Node, *, owner_col: int, owner_is_key: bool, layout: Layout) -> Rendered:
+    """A block-style copy of `node` as written (built from its own file, without includes expanded).
+
+    Keys and single-line scalars keep their written text, so quoting, number formats and include strings stay.
+    Nested aliases stay `*name`. The node's anchors and comments are not copied. Collections are written in
+    block style like new values; multi-line scalars are written as new multi-line values are.
+    """
+    if isinstance(node, MappingNode) and node.entries:
+        assert node.written is None, "a copy never holds a merge key"
+        col = owner_col + layout.unit
+        lines: list[str] = []
+        for entry in node.entries:
+            lines.extend(_copy_entry(entry, col, layout))
+        return Rendered("", lines)
+    if isinstance(node, SequenceNode) and node.items:
+        col = owner_col + (layout.seq_offset if owner_is_key else layout.unit)
+        lines = []
+        for item in node.items:
+            lines.extend(_copy_item(item, col, layout))
+        return Rendered("", lines)
+    if isinstance(node, MappingNode | SequenceNode):
+        return Rendered("{}" if isinstance(node, MappingNode) else "[]")
+    assert isinstance(node, ScalarNode)
+    text = node.file.text[node.start : node.end]
+    if node.block is None and not node.tagged and "\n" not in text and "\r" not in text:
+        return Rendered(text)
+    return render_value(node.value, owner_col=owner_col, owner_is_key=owner_is_key, layout=layout)
+
+
+def _copied(holder: Entry | Item, owner_col: int, owner_is_key: bool, layout: Layout) -> Rendered:
+    if holder.alias is not None:
+        return Rendered("*" + holder.alias.name)
+    return copy_value(holder.value, owner_col=owner_col, owner_is_key=owner_is_key, layout=layout)
+
+
+def _copy_entry(entry: Entry, col: int, layout: Layout) -> list[str]:
+    key = entry.key_node
+    written = key.file.text[key.start : key.end]
+    key_text = written if "\n" not in written else render_key(entry.key, None, flow=False)
+    r = _copied(entry, col, True, layout)
+    return [" " * col + key_text + ":" + (" " + r.inline if r.inline else ""), *r.lines]
+
+
+def _copy_item(item: Item, col: int, layout: Layout) -> list[str]:
+    """An item at column `col`; a non-empty collection uses the compact `- key: v` form, as `item_lines` does."""
+    value = item.value
+    if (
+        item.alias is None
+        and isinstance(value, MappingNode | SequenceNode)
+        and (value.entries if isinstance(value, MappingNode) else value.items)
+    ):
+        # Collections owned by a `-` go one unit in; place them at col + 2 so the first joins the dash.
+        inner = copy_value(value, owner_col=col + 2 - layout.unit, owner_is_key=False, layout=layout).lines
+        return [" " * col + "- " + inner[0][col + 2 :], *inner[1:]]
+    r = _copied(item, col, False, layout)
     return [" " * col + "-" + (" " + r.inline if r.inline else ""), *r.lines]

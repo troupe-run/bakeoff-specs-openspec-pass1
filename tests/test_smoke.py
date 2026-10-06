@@ -233,3 +233,23 @@ def test_in_include_writes_into_the_shared_file_end_to_end(theatre: Path) -> Non
         b"model: big  # strongest\nprompt: file:coder.md\ntemperature: 0.3\n"
     )
     assert troupe(theatre, "get", "agents.coder.temperature").stdout == "0.3\n"
+
+
+def test_shared_anchor_is_refused_then_expanded_end_to_end(tmp_path: Path) -> None:
+    """The reported bug (troupe-run/bakeoff-specs-openspec-pass1#2), through the real command."""
+    config = tmp_path / ".troupe" / "troupe.yml"
+    config.parent.mkdir()
+    shared = b"defaults: &d\n  model: opus\ncoder:\n  settings: *d\nreviewer:\n  settings: *d\n"
+    config.write_bytes(shared)
+    r = troupe(tmp_path, "set", "coder.settings.model", "sonnet")
+    assert (r.returncode, r.stdout) == (3, "")
+    assert "--expand-alias" in r.stderr
+    assert config.read_bytes() == shared
+    r = troupe(tmp_path, "set", "--expand-alias", "coder.settings.model", "sonnet")
+    assert (r.returncode, r.stdout, r.stderr) == (0, "", "")
+    assert config.read_bytes() == (
+        b"defaults: &d\n  model: opus\ncoder:\n  settings:  # expanded from *d by troupe\n    model: sonnet\n"
+        b"reviewer:\n  settings: *d\n"
+    )
+    assert troupe(tmp_path, "get", "reviewer.settings.model").stdout == "opus\n"
+    assert troupe(tmp_path, "get", "coder.settings.model").stdout == "sonnet\n"

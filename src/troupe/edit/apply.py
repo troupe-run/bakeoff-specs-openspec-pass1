@@ -10,16 +10,37 @@ from dataclasses import dataclass
 from pathlib import Path as FsPath
 
 from troupe.edit import ops as prim
-from troupe.edit.plan import AddKey, AddOverride, Append, Delete, Op, Replace, WriteText, nest, plan
+from troupe.edit.plan import (
+    AddKey,
+    AddOverride,
+    Append,
+    Delete,
+    ExpandAlias,
+    Op,
+    Replace,
+    WriteText,
+    nest,
+    plan,
+)
 from troupe.edit.text import apply_edits
-from troupe.errors import LoadError, WriteRefused
+from troupe.errors import LoadError, MergeKeyWrite, ThroughAlias, WriteRefused
 from troupe.leaves import diff_leaves, leaves
 from troupe.loader import Config, load
 from troupe.overrides import is_bare, ref_entry
 from troupe.paths import Path, format_path
 from troupe.schema import Data, same
 from troupe.store import Change
-from troupe.tree import Entry, Item, MappingNode, Node, ScalarNode, SequenceNode, TextNode, to_data
+from troupe.tree import (
+    Entry,
+    Item,
+    MappingNode,
+    Node,
+    ScalarNode,
+    SequenceNode,
+    TextNode,
+    build_tree,
+    to_data,
+)
 
 
 @dataclass
@@ -37,11 +58,21 @@ def compute_set(
     in_include: bool = False,
     expand_alias: bool = False,
 ) -> SetResult:
-    operations = plan(config.root, path, value, in_include=in_include)
     original = {key: src.text for key, src in config.files.items()}
     texts = dict(original)
-    expected = _expected(config.root, path, value)
     current = config
+    while True:
+        try:
+            operations = plan(current.root, path, value, in_include=in_include)
+            break
+        except ThroughAlias as e:
+            # With --expand-alias, give the alias the set stopped at a copy, then plan again on the result.
+            # Each round replaces one alias nearer the change, so this ends.
+            if not expand_alias or e.in_flow:
+                raise
+            _apply(current, ExpandAlias(e.alias_at), texts)
+            current = _reload(theatre, texts, path)
+    expected = _expected(current.root, path, value)  # an expansion changes no value
     for op in operations:
         _apply(current, op, texts)
         current = _reload(theatre, texts, path)
@@ -68,6 +99,10 @@ def _apply(config: Config, op: Op, texts: dict[FsPath, str]) -> None:
         node = _node_at(config.root, op.path)
         assert isinstance(node, TextNode)
         texts[node.target.path.resolve()] = to_crlf(op.text) if "\r\n" in node.target.text else op.text
+        return
+    if isinstance(op, ExpandAlias):
+        src, edits = _expand_alias(config.root, op.path, where)
+        texts[src.path.resolve()] = apply_edits(texts[src.path.resolve()], edits)
         return
     for src, edits in _edits(config.root, op, where):
         file_key = src.path.resolve()
@@ -164,6 +199,57 @@ def _add_override(root: Node, op: AddOverride) -> prim.FileEdits:
         assert isinstance(entry.value, MappingNode) and entry.value.include is None, op.path
         mapping, rel = as_written(entry.value), rel[1:]
     return prim.add_key(mapping, rel[0], nest(rel[1:], op.value))
+
+
+def _expand_alias(root: Node, path: Path, where: str) -> prim.FileEdits:
+    """The edits that replace the alias at `path` with a copy of its anchored node as written."""
+    parent = _node_at(root, path[:-1])
+    holder: Entry | Item | None = None
+    if isinstance(parent, MappingNode):
+        for merged in reversed(parent.layers or [parent]):  # the alias as written, in whichever layer has it
+            layer = as_written(merged)
+            entry = layer.get(path[-1])
+            if entry is not None and entry.alias is not None:
+                parent, holder = layer, entry
+                break
+    else:
+        assert isinstance(parent, SequenceNode), where
+        holder = parent.items[int(path[-1])]
+    assert holder is not None and holder.alias is not None, where
+    anchor = holder.alias.target.anchor
+    assert anchor is not None, where
+    # The anchored node as written: its own file's tree, with no includes expanded.
+    copy = _anchored_at(build_tree(parent.file), anchor.start)
+    if _holds_merge_key(copy):
+        raise MergeKeyWrite(where, format_path(path), f"the copy of *{holder.alias.name} would contain")
+    return prim.expand_alias(parent, holder, copy, where)
+
+
+def _anchored_at(node: Node | None, start: int) -> Node:
+    """The node of a tree built from one file whose anchor starts at `start`."""
+    stack = [node]
+    while stack:
+        here = stack.pop()
+        if here is None:
+            continue
+        if here.anchor is not None and here.anchor.start == start:
+            return here
+        if isinstance(here, MappingNode):
+            stack.extend(e.value for e in as_written(here).entries if e.alias is None)
+        elif isinstance(here, SequenceNode):
+            stack.extend(i.value for i in here.items if i.alias is None)
+    raise AssertionError(f"no anchor at offset {start}")
+
+
+def _holds_merge_key(node: Node) -> bool:
+    """Whether a merge key is written in `node` (not counting what aliases in it refer to)."""
+    if isinstance(node, MappingNode):
+        return node.written is not None or any(
+            e.alias is None and _holds_merge_key(e.value) for e in node.entries
+        )
+    if isinstance(node, SequenceNode):
+        return any(i.alias is None and _holds_merge_key(i.value) for i in node.items)
+    return False
 
 
 def to_crlf(text: str) -> str:

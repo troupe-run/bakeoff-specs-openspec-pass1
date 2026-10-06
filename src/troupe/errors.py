@@ -40,14 +40,15 @@ class ThroughAlias(WriteRefused):
     def __init__(
         self,
         path: str,
-        alias_path: str,
+        alias_at: tuple[str, ...],
         name: str,
         anchor_path: str | None,
         at_anchor: str | None,
         *,
         in_flow: bool,
     ) -> None:
-        self.alias_path = alias_path
+        self.alias_at = alias_at  # the path of the alias, for `set --expand-alias`
+        alias_path = ".".join(alias_at)
         self.name = name
         self.in_flow = in_flow
         where = f"&{name} at {anchor_path}" if anchor_path is not None else f"&{name}"

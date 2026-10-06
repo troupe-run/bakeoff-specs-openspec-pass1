@@ -22,7 +22,7 @@ Every command takes `--theatre DIR` (default: the current directory).
 |---|---|
 | `troupe config get PATH` | Print the scalar at `PATH` (a mapping or list exits 5: use `show`) |
 | `troupe config show [PATH] [--sources]` | Print the value at `PATH`, or the whole configuration, as YAML with includes resolved; `--sources` says which file each value comes from |
-| `troupe config set PATH VALUE [--reason TEXT] [--in-include]` | Change or create the value at `PATH` and write it back into the file that holds it; `--reason` is recorded in the history; `--in-include` puts new keys into the included (shared) file instead of an override |
+| `troupe config set PATH VALUE [--reason TEXT] [--in-include] [--expand-alias]` | Change or create the value at `PATH` and write it back into the file that holds it; `--reason` is recorded in the history; `--in-include` puts new keys into the included (shared) file instead of an override; `--expand-alias` gives a value reached through an [alias](#anchors-and-aliases) its own copy |
 | `troupe config history [PATH]` | Print the change events with their [lineage](#lineage) as JSON Lines, oldest first, optionally only for `PATH` and below |
 | `troupe config watch` | Record hand edits to the files as they happen, until Ctrl-C (SIGINT) or SIGTERM |
 
@@ -220,6 +220,28 @@ This covers a mapping or list VALUE that would change anything under an alias, a
 entry whose value is an alias is fine, since it changes nothing else. Deleting an anchor that an alias still uses is
 refused (exit 3).
 
+To change it for one user only, ask for that user's own copy with `--expand-alias`. The alias is replaced by a
+block-style copy of the anchored node as it is written, marked with a comment, and the value is then set in the
+copy. The anchor and every other alias stay as they were:
+
+```sh
+printf 'defaults: &d\n  model: opus\ncoder:\n  settings: *d\nreviewer:\n  settings: *d\n' > /tmp/demo/.troupe/troupe.yml
+uv run troupe config set --expand-alias coder.settings.model sonnet --theatre /tmp/demo
+cat /tmp/demo/.troupe/troupe.yml
+# defaults: &d
+#   model: opus
+# coder:
+#   settings:  # expanded from *d by troupe
+#     model: sonnet
+# reviewer:
+#   settings: *d
+```
+
+The copy keeps each key and scalar as written (quoting, `0x10`, include strings), and aliases inside the anchored
+node stay aliases. An alias that the set still reaches through is expanded too, with its own comment. An alias inside
+a flow collection (`{…}`, `[…]`) cannot take a block-style copy, so setting through it is refused even with the flag.
+With no alias in the way, the flag changes nothing, so running the same command again is safe.
+
 Merge keys are never written. In a mapping with `<<`, its own keys are set where they are written, and a new key goes
 after its last entry. But a value that the merge key supplies cannot be set, deleted or given a copy (exit 3, even
 with `--expand-alias`), and neither can the `<<` entry or anything that holds it. Change the merged value at its
@@ -259,7 +281,8 @@ on the `.troupe/` directory), so troupe never records its own write-back a secon
 These are recorded with their reasons in `openspec/changes/archive/2026-10-02-config-load-show-set/design.md`,
 `openspec/changes/archive/2026-10-03-config-sync-with-files/design.md`, `openspec/changes/archive/2026-10-03-config-get-and-show/design.md`,
 `openspec/changes/archive/2026-10-04-config-lineage/design.md`, `openspec/changes/archive/2026-10-05-config-include-overrides/design.md`
-and `openspec/changes/archive/2026-10-05-config-set-in-include/design.md`:
+`openspec/changes/archive/2026-10-05-config-set-in-include/design.md` and
+`openspec/changes/archive/2026-10-06-config-anchors-and-aliases/design.md`:
 
 1. Setting a key under a null or scalar value (e.g. `agents:` with nothing after it) exits 5. Set the parent to a
    mapping first: `set agents '{coder: {model: x}}'`.
@@ -328,6 +351,20 @@ and `openspec/changes/archive/2026-10-05-config-set-in-include/design.md`:
 37. With `--in-include` and nested includes, the key goes into the innermost included file: the file containing its
     deepest existing ancestor.
 38. `--in-include` adds no exit codes and does not change the recorded events: history records values, not files.
+39. Merge keys (`<<`) are applied when reading, since that is what people who write `<<: *base` mean.
+40. A value supplied by a merge key cannot be set, even with `--expand-alias` (exit 3). Writing a local key instead
+    would not touch `<<`, but merges are shallow: a local mapping would silently drop the other merged sub-keys.
+41. Deleting or replacing anything that holds a `<<` entry is refused (exit 3): "never written" covers removal.
+42. `--expand-alias` with no alias in the way changes nothing, so re-running a command after the expansion succeeds.
+43. `--expand-alias` expands every alias the set would otherwise be refused for, including nested ones and those a
+    mapping or list VALUE reaches into. Expanding only the first would leave the command refused.
+44. A comment already on the alias's line is kept, and the `# expanded from *name by troupe` marker follows it.
+45. The copy is the anchored node as written, not its resolved value: nested aliases, include strings, quoting and
+    number formats stay. Anchors inside it are not copied, as they would re-bind later aliases.
+46. A path through an alias in an included file, or in the included part of a mapping-form include, is refused, even
+    where an override would be written elsewhere. That refuses more than strictly needed, but never writes through
+    an anchor.
+47. A new key named `<<` is written quoted (`'<<'`), so it is an ordinary key and never a merge key.
 
 ## Development
 

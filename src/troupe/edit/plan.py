@@ -52,7 +52,12 @@ class WriteText:
     text: str
 
 
-type Op = Replace | AddKey | AddOverride | Append | Delete | WriteText
+@dataclass(frozen=True)
+class ExpandAlias:
+    path: Path  # the entry or item whose value is written as an alias; it gets a copy of the anchored node
+
+
+type Op = Replace | AddKey | AddOverride | Append | Delete | WriteText | ExpandAlias
 
 
 def describe(node: Node) -> str:
@@ -149,7 +154,7 @@ def through_alias(root: Node, path: Path, alias_path: Path, alias: Alias) -> Thr
     rest = path[len(alias_path) :]
     return ThroughAlias(
         format_path(path),
-        format_path(alias_path),
+        alias_path,
         alias.name,
         format_path(anchor) if anchor is not None else None,
         format_path((*anchor, *rest)) if anchor is not None else None,
