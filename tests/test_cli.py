@@ -49,6 +49,8 @@ def test_theatre_option_may_come_before_the_subcommand(
         ("get", "model", "--reason", "x"),
         ("set", "model", "b", "--in-include", "x"),
         ("get", "model", "--in-include"),
+        ("set", "model", "b", "--expand-alias", "x"),
+        ("get", "model", "--expand-alias"),
     ],
 )
 def test_bad_command_lines_exit_2_with_empty_stdout(
@@ -87,6 +89,22 @@ def test_set_takes_an_optional_in_include_anywhere(
     r = t.run(*args)
     assert (r.code, r.out, r.err) == (0, "", "")
     assert t.read("troupe.yml") == "a:\n  b: 1\n  x: 1\n"
+
+
+@pytest.mark.parametrize(
+    ("args", "after"),
+    [
+        (("set", "a.x", "1", "--expand-alias"), "a:\n  b: 1\n  x: 1\n"),
+        (("set", "--expand-alias", "a.y", "2", "--reason", "why"), "a:\n  b: 1\n  y: 2\n"),
+    ],
+)
+def test_set_takes_an_optional_expand_alias_anywhere(
+    make: Callable[[str], Theatre], args: tuple[str, ...], after: str
+) -> None:
+    t = make("a:\n  b: 1\n")
+    r = t.run(*args)
+    assert (r.code, r.out, r.err) == (0, "", "")
+    assert t.read("troupe.yml") == after
 
 
 @pytest.mark.parametrize("args", [("show",), ("show", "--sources")])

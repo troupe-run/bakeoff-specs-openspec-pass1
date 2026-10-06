@@ -102,5 +102,10 @@ def render_scalar(value: Scalar, preferred: str | None, *, flow: bool) -> str:
 
 
 def render_key(key: str, preferred: str | None, *, flow: bool) -> str:
-    """A new mapping key; like a string value, it is quoted when plain would read back as another type."""
+    """A new mapping key; like a string value, it is quoted when plain would read back as another type.
+
+    A `<<` key is quoted too: written plain, it would be a merge key (and troupe never writes those).
+    """
+    if key == "<<" and preferred is None:
+        preferred = "'"
     return _render(key, preferred, flow=flow)

@@ -220,6 +220,17 @@ This covers a mapping or list VALUE that would change anything under an alias, a
 entry whose value is an alias is fine, since it changes nothing else. Deleting an anchor that an alias still uses is
 refused (exit 3).
 
+Merge keys are never written. In a mapping with `<<`, its own keys are set where they are written, and a new key goes
+after its last entry. But a value that the merge key supplies cannot be set, deleted or given a copy (exit 3, even
+with `--expand-alias`), and neither can the `<<` entry or anything that holds it. Change the merged value at its
+anchor, or edit the file by hand:
+
+```sh
+printf 'base: &b\n  model: opus\ncoder:\n  <<: *b\n  temperature: 0.5\n' > /tmp/demo/.troupe/troupe.yml
+uv run troupe config set coder.temperature 0.7 --theatre /tmp/demo   # changes coder's own key
+uv run troupe config set coder.model sonnet --theatre /tmp/demo      # exit 3: supplied by the merge key coder.<<
+```
+
 ### Exit codes
 
 | Code | Meaning |

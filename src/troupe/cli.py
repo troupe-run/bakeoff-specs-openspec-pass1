@@ -46,6 +46,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="write new keys into the included file itself, not as overrides in the including file",
     )
+    set_.add_argument(
+        "--expand-alias",
+        action="store_true",
+        help="replace an alias on the way with a copy of its anchored value, then set the value in the copy",
+    )
     history = sub.add_parser("history", parents=[theatre], help="list configuration changes as JSON Lines")
     history.add_argument("path", nargs="?")
     sub.add_parser("watch", parents=[theatre], help="record hand edits to the files as they happen")
@@ -67,7 +72,13 @@ def run(argv: Sequence[str]) -> str:
     if args.command == "set":
         path = parse_path(args.path)
         commands.set_value(
-            theatre, path, parse_value(args.value), actor, args.reason, in_include=args.in_include
+            theatre,
+            path,
+            parse_value(args.value),
+            actor,
+            args.reason,
+            in_include=args.in_include,
+            expand_alias=args.expand_alias,
         )
         return ""
     if args.command == "watch":

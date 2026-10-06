@@ -3,16 +3,17 @@
 When the existing value and VALUE are both mappings (or both lists) only their differences become
 operations, so unchanged entries keep their bytes. YAML include roots are never rewritten: changing or
 deleting one is refused. Nothing is written through an alias (`*name`), since that would change the anchor
-and every other use of it: such a set raises `ThroughAlias`, naming the alias.
+and every other use of it: such a set raises `ThroughAlias`, naming the alias. Merge keys (`<<`) are never
+written: a set that would change one, or a value one supplies, raises `MergeKeyWrite`.
 """
 
 from dataclasses import dataclass
 
-from troupe.errors import PathError, ThroughAlias, WriteRefused
+from troupe.errors import MergeKeyWrite, PathError, ThroughAlias, WriteRefused
 from troupe.overrides import is_bare
 from troupe.paths import Path, format_path, is_index
 from troupe.schema import Data, same
-from troupe.tree import Alias, MappingNode, Node, ScalarNode, SequenceNode, TextNode, to_data
+from troupe.tree import Alias, MappingNode, Node, ScalarNode, SequenceNode, TextNode, merged_in, to_data
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,8 @@ def plan(root: Node, path: Path, value: Data, *, in_include: bool = False) -> li
                 if any(is_index(s) for s in path[i:]):
                     raise PathError(f"{format_path(path)}: not found ({format_path(here)} does not exist)")
                 return [new_key_target(root, here, nest(rest, value), in_include=in_include)]
+            if merged_in(node, segment) is not None:
+                raise merge_supplied(path, here)
             if entry.alias is not None:
                 raise through_alias(root, path, here, entry.alias)
             node = entry.value
@@ -117,6 +120,27 @@ def _existing(root: Node, path: Path) -> Node | None:
         else:
             return None
     return node
+
+
+def merge_supplied(path: Path, value_path: Path) -> MergeKeyWrite:
+    """The refusal for a `set` of `path` that would change the merge-supplied value at `value_path`."""
+    return MergeKeyWrite(
+        format_path(path), format_path(value_path[:-1]), f"{format_path(value_path)} is supplied by"
+    )
+
+
+def _check_no_merge_keys(node: Node, path: Path, top: Path) -> None:
+    """Refuse to replace or delete `node` (at `path`) if a merge key is written in it."""
+    if isinstance(node, MappingNode):
+        if node.written is not None:
+            raise MergeKeyWrite(format_path(top), format_path(path), "this would rewrite")
+        for entry in node.entries:
+            if entry.alias is None:
+                _check_no_merge_keys(entry.value, (*path, entry.key), top)
+    elif isinstance(node, SequenceNode):
+        for index, item in enumerate(node.items):
+            if item.alias is None:
+                _check_no_merge_keys(item.value, (*path, str(index)), top)
 
 
 def through_alias(root: Node, path: Path, alias_path: Path, alias: Alias) -> ThroughAlias:
@@ -226,11 +250,18 @@ def _diff(
         deletes: list[Op] = []
         for entry in node.entries:
             if entry.key not in value:
-                _check_no_includes(entry.value, (*path, entry.key))
+                if merged_in(node, entry.key) is not None:
+                    raise merge_supplied(top, (*path, entry.key))
+                if entry.alias is None:
+                    _check_no_includes(entry.value, (*path, entry.key))
+                    _check_no_merge_keys(entry.value, (*path, entry.key), top)
                 deletes.append(Delete((*path, entry.key)))
         for key, child in value.items():
             existing = node.get(key)
-            if existing is None:
+            if existing is not None and merged_in(node, key) is not None:
+                if not same(to_data(existing.value), child):
+                    raise merge_supplied(top, (*path, key))
+            elif existing is None:
                 adds.append(new_key_target(root, (*path, key), child, in_include=in_include))
             elif existing.alias is not None:
                 if not same(to_data(existing.value), child):
@@ -248,7 +279,9 @@ def _diff(
         for index in range(len(node.items), len(value)):
             ops.append(Append((*path, str(index)), value[index]))
         for index in reversed(range(len(value), len(node.items))):
-            _check_no_includes(node.items[index].value, (*path, str(index)))
+            if node.items[index].alias is None:
+                _check_no_includes(node.items[index].value, (*path, str(index)))
+                _check_no_merge_keys(node.items[index].value, (*path, str(index)), top)
             ops.append(Delete((*path, str(index))))
         return
     if isinstance(node, ScalarNode) and same(node.value, value):
@@ -256,4 +289,5 @@ def _diff(
     _check_no_includes(node, path)
     if same(to_data(node), value):
         return
+    _check_no_merge_keys(node, path, top)
     ops.append(Replace(path, value))

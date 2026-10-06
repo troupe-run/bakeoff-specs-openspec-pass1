@@ -120,6 +120,8 @@ def owned_end(node: Node) -> int:
     """
     if node.include is not None:
         return owned_end(node.include.overrides or node.include.string)
+    if isinstance(node, MappingNode) and node.written is not None:
+        return owned_end(node.written)  # merged-in entries are written elsewhere
     if isinstance(node, ScalarNode) and node.block is not None and node.block.chomp == "+":
         return max(node.end, node.block.region_end - 1)
     if isinstance(node, MappingNode) and not node.flow_style and node.entries:

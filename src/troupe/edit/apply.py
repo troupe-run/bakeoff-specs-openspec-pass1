@@ -29,7 +29,13 @@ class SetResult:
 
 
 def compute_set(
-    theatre: FsPath, config: Config, path: Path, value: Data, *, in_include: bool = False
+    theatre: FsPath,
+    config: Config,
+    path: Path,
+    value: Data,
+    *,
+    in_include: bool = False,
+    expand_alias: bool = False,
 ) -> SetResult:
     operations = plan(config.root, path, value, in_include=in_include)
     original = {key: src.text for key, src in config.files.items()}
@@ -95,7 +101,8 @@ def _delete_key(root: Node, path: Path, parent: MappingNode, key: str, where: st
     changes nothing), up to the mapping that holds `$ref`, which stays.
     """
     out: list[prim.FileEdits] = []
-    for depth, layer in enumerate(parent.layers or [parent]):
+    for depth, merged in enumerate(parent.layers or [parent]):
+        layer = as_written(merged)
         entry = layer.get(key)
         if entry is None:
             continue
@@ -110,7 +117,8 @@ def _delete_layer(root: Node, path: Path, layer: MappingNode, where: str) -> lis
     """Delete the override mapping `layer` (the value at `path`) from the override that holds it."""
     holder = _node_at(root, path[:-1])
     assert isinstance(holder, MappingNode), where
-    for depth, outer in enumerate(holder.layers or [holder]):
+    for depth, merged in enumerate(holder.layers or [holder]):
+        outer = as_written(merged)
         entry = outer.get(path[-1])
         if entry is not None and entry.value is layer:
             if depth > 0 and len(outer.entries) == 1 and ref_entry(outer) is None:
@@ -148,13 +156,13 @@ def _add_override(root: Node, op: AddOverride) -> prim.FileEdits:
             if isinstance(parent, MappingNode):
                 key = parent.get(op.include_path[-1])
         return prim.to_mapping_form(include.string, key, {rel[0]: nest(rel[1:], op.value)})
-    mapping = include.overrides
+    mapping = as_written(include.overrides)
     while len(rel) > 1:
         entry = mapping.get(rel[0])
         if entry is None:
             break
         assert isinstance(entry.value, MappingNode) and entry.value.include is None, op.path
-        mapping, rel = entry.value, rel[1:]
+        mapping, rel = as_written(entry.value), rel[1:]
     return prim.add_key(mapping, rel[0], nest(rel[1:], op.value))
 
 
@@ -168,15 +176,20 @@ def physical_mapping(node: MappingNode) -> MappingNode:
 
     For a merged mapping that is the innermost included one (only `set --in-include` adds keys there).
     """
-    mapping = node.layers[0] if node.layers else node
+    mapping = as_written(node.layers[0] if node.layers else node)
     assert not mapping.layers
     return mapping
+
+
+def as_written(mapping: MappingNode) -> MappingNode:
+    """A mapping as written in its file: for one with a merge key, without the merged-in entries."""
+    return mapping.written or mapping
 
 
 def _slot(parent: Node, key: str) -> prim.Slot:
     """Where the value at `key` is written: for a merged mapping, in the last layer that sets it."""
     if isinstance(parent, MappingNode):
-        layer = next(m for m in reversed(parent.layers or [parent]) if m.get(key) is not None)
+        layer = next(as_written(m) for m in reversed(parent.layers or [parent]) if m.get(key) is not None)
         entry = layer.get(key)
         assert entry is not None
         return prim.Slot(node=entry.value, parent=layer, entry=entry)
