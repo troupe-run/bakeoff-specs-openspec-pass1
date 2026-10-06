@@ -37,6 +37,6 @@
 
 ## 6. Integration
 
-- [ ] 6.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`. Verify all are clean and show the output
-- [ ] 6.2 Run `openspec validate config-anchors-and-aliases --strict`. Verify it reports the change as valid
+- [x] 6.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`. Verify all are clean and show the output
+- [x] 6.2 Run `openspec validate config-anchors-and-aliases --strict`. Verify it reports the change as valid
 - [ ] 6.3 Commit the work on `main` in small steps with messages that say why and reference troupe-run/bakeoff-specs-openspec-pass1#2 (no push, no PR), then archive the change and sync its specs into `openspec/specs`. Verify `git status` is clean and `git log` shows the commits

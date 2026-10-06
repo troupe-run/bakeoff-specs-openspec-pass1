@@ -193,7 +193,7 @@ def _copy_entry(entry: Entry, col: int, layout: Layout) -> list[str]:
 
 
 def _copy_item(item: Item, col: int, layout: Layout) -> list[str]:
-    """An item at column `col`; a non-empty collection uses the compact `- key: v` form, as `item_lines` does."""
+    """An item at column `col`; a non-empty collection is compact (`- key: v`), as in `item_lines`."""
     value = item.value
     if (
         item.alias is None

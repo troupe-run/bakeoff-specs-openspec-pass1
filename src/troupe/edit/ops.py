@@ -328,7 +328,7 @@ EXPANDED_COMMENT = "# expanded from *{name} by troupe"
 def expand_alias(
     parent: MappingNode | SequenceNode, holder: Entry | Item, copy: Node, where: str
 ) -> FileEdits:
-    """Replace the alias that is `holder`'s value with a block-style copy of `copy`, its anchored node as written.
+    """Replace the alias that is `holder`'s value with `copy`, its anchored node as written, in block style.
 
     The `*name` goes, and the end-of-line comment `EXPANDED_COMMENT` is put on the key's (or dash's) line, two
     spaces after whatever ends it. A scalar copy takes the alias's place; a collection copy follows that line.
