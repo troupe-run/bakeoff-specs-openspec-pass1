@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from test_render import read_back
 
-from conftest import Result, Theatre
+from conftest import HttpServer, Result, Theatre
 from troupe.loader import load
 from troupe.tree import to_data
 
@@ -104,3 +104,15 @@ def test_sources_name_the_overriding_file_for_overridden_values(theatre: Theatre
     assert r.out == (
         "coder:\n  model: m1 # from .troupe/agents/coder.yaml\n  temperature: 0.3 # from .troupe/troupe.yml\n"
     )
+
+
+def test_sources_from_a_remote_include_are_urls(theatre: Theatre, http_server: HttpServer) -> None:
+    coder = http_server.serve("/team/coder.yaml", "model: m1\nprompt: file:coder.md\n")
+    prompt = http_server.serve("/team/coder.md", "Hi\n")
+    theatre.write("troupe.yml", f"coder:\n  $ref: {coder}\n  temperature: 0.3\n")
+    r = theatre.run("show", "--sources")
+    assert (r.code, r.out) == (
+        0,
+        f"coder:\n  model: m1 # from {coder}\n  prompt: | # from {prompt}\n    Hi\n"
+        "  temperature: 0.3 # from .troupe/troupe.yml\n",
+    ), r.err

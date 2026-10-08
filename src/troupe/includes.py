@@ -12,7 +12,7 @@ from troupe.tree import ScalarNode
 
 FILE_PREFIX = "file:"
 URL_PREFIXES = ("https://", "http://")
-INCLUDE_PREFIXES = (FILE_PREFIX,)
+INCLUDE_PREFIXES = (FILE_PREFIX, *URL_PREFIXES)
 LITERAL_TAG = "!literal"
 YAML_SUFFIXES = (".yml", ".yaml")
 

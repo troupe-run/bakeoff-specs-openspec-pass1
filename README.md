@@ -122,8 +122,10 @@ imports the files again, and the earlier history is lost.
 
 ### Includes
 
-A string starting with `file:` includes the named file, relative to the file containing it. A `.yml`/`.yaml` target is
-embedded as YAML; any other target's exact text becomes a string value. Setting a text include rewrites the target
+A string starting with `file:` includes the named file, relative to the file containing it. A string starting with
+`https://` or `http://` includes what that URL serves (see [Remote includes](#remote-includes)). A `.yml`/`.yaml`
+target is embedded as YAML; any other target's exact text becomes a string value. A string tagged `!literal` is never
+an include (see [Literal strings](#literal-strings)). Setting a text include rewrites the target
 file (keeping CRLF line endings if it had them). Replacing a whole YAML include is refused (exit 3).
 
 Included files are shared between theatres, so an include can also be written in **mapping form**, with
@@ -185,6 +187,32 @@ cat /tmp/demo/.troupe/agents/coder.yaml
 
 Mapping-form includes need step 5 or later. Older code reads `$ref` as an ordinary key, so going back means
 rewriting them as one-line includes (and moving the overrides into the shared file) by hand.
+
+### Remote includes
+
+Shared team configuration can live on a web server. A URL include works like a file include. A URL whose path
+(without query string) ends `.yml`/`.yaml` is embedded as YAML, and any other is text. It can be written in mapping
+form with overrides:
+
+```yaml
+agents:
+  coder:
+    $ref: https://config.example.com/team/coder.yaml
+    temperature: 0.3          # this theatre only
+```
+
+URLs are fetched every time the configuration loads: every command, each `watch` reconcile, and once (not again)
+during a `set`. A change on the server is recorded at the next reconcile, like a hand edit (`via` `file`, actor
+unknown). `watch` does not poll URLs, so it records such a change when a local change, or another command, next
+reconciles. A failed fetch fails to load (exit 4), naming the URL. That covers a server that cannot be reached, a
+response that is not 2xx, no answer within 30 seconds, a body that is not UTF-8, invalid YAML, and a redirect to
+anything but `http`/`https`.
+
+A `file:` include inside remote content is relative to that content's URL, like a link in a web page. Remote content
+can never read your local files. `show --sources` names remote values by URL.
+
+**Upgrading:** before step 7, a string such as `homepage: https://example.com/docs.yaml` was a plain string. Now it is
+fetched. Tag it `!literal`, or mark it in the [schema](#schema) with `"format": "uri"`, to keep it a string.
 
 ### Literal strings
 
@@ -274,7 +302,7 @@ uv run troupe config set coder.model sonnet --theatre /tmp/demo      # exit 3: s
 | 0 | success |
 | 2 | usage error (bad arguments, path syntax, VALUE or `TROUPE_ACTOR`) |
 | 3 | write refused, so no file changed |
-| 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, include cycle, overrides on a text include or on included content that is not a mapping, an alias without an anchor before it, a merge key that names no mapping) |
+| 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, a remote include that cannot be fetched, include cycle, overrides on a text include or on included content that is not a mapping, an alias without an anchor before it, a merge key that names no mapping) |
 | 5 | path not found, or the wrong kind of node for the command |
 
 On failure stdout is empty and stderr names the path or file involved.

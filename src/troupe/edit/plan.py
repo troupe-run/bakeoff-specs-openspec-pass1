@@ -242,7 +242,7 @@ def _diff(
         return
     if isinstance(node, TextNode):
         if not isinstance(value, str):
-            raise WriteRefused(f"{where}: is the text of {node.target.path}; VALUE must be a string")
+            raise WriteRefused(f"{where}: is the text of {node.target.name}; VALUE must be a string")
         if value != node.value:
             ops.append(WriteText(path, value))
         return

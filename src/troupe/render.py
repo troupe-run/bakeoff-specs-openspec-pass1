@@ -28,7 +28,10 @@ class Line:
 
 
 def source_label(file: SourceFile, theatre: Path) -> str:
-    """The file's path relative to the theatre, normalised lexically (symlinks are not resolved)."""
+    """The file's path relative to the theatre, normalised lexically (symlinks are not resolved); for
+    remote content, its URL."""
+    if file.url is not None:
+        return file.url
     return Path(os.path.relpath(os.path.abspath(file.path), os.path.abspath(theatre))).as_posix()
 
 

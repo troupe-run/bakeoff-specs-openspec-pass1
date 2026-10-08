@@ -71,11 +71,11 @@ def compute_set(
             if not expand_alias or e.in_flow:
                 raise
             _apply(current, ExpandAlias(e.alias_at), texts)
-            current = _reload(theatre, texts, path)
+            current = _reload(theatre, texts, path, config)
     expected = _expected(current.root, path, value)  # an expansion changes no value
     for op in operations:
         _apply(current, op, texts)
-        current = _reload(theatre, texts, path)
+        current = _reload(theatre, texts, path, config)
     if texts == original:
         return SetResult({}, [])
     if not _matches(current.root, expected):
@@ -86,9 +86,10 @@ def compute_set(
     return SetResult(writes, diff_leaves(leaves(to_data(config.root)), leaves(to_data(current.root))))
 
 
-def _reload(theatre: FsPath, texts: dict[FsPath, str], path: Path) -> Config:
+def _reload(theatre: FsPath, texts: dict[FsPath, str], path: Path, config: Config) -> Config:
+    """The configuration from the edited texts, with the same remote content `config` was loaded with."""
     try:
-        return load(theatre, overlay=texts)
+        return load(theatre, overlay=texts, fetcher=config.fetcher)
     except LoadError as e:
         raise WriteRefused(f"{format_path(path)}: the result would not load ({e}); not writing") from None
 

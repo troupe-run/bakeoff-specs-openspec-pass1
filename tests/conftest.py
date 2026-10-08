@@ -1,7 +1,11 @@
 """Shared fixtures: real theatres on disk and the real CLI entry point, run in-process."""
 
-from collections.abc import Callable
-from dataclasses import dataclass
+import socket
+import threading
+from collections import Counter
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -121,3 +125,74 @@ def full(theatre: Theatre) -> Theatre:
     theatre.write("agents/coder.yaml", "model: m1\ntemperature: 0.2\n")
     theatre.write("prompt.md", "Hello\nWorld\n")
     return theatre
+
+
+@dataclass
+class Route:
+    status: int
+    body: bytes
+    headers: dict[str, str] = field(default_factory=dict)
+
+
+class HttpServer:
+    """A real HTTP server on 127.0.0.1 serving `routes` (by request path, query included) and counting requests.
+
+    Paths it has no route for get 404.
+    """
+
+    def __init__(self) -> None:
+        self.routes: dict[str, Route] = {}
+        self.requests: Counter[str] = Counter()
+        routes, requests = self.routes, self.requests
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                requests[self.path] += 1
+                route = routes.get(self.path, Route(404, b"not found"))
+                self.send_response(route.status)
+                for name, value in route.headers.items():
+                    self.send_header(name, value)
+                self.send_header("Content-Length", str(len(route.body)))
+                self.end_headers()
+                self.wfile.write(route.body)
+
+            def log_message(self, format: str, *args: object) -> None:
+                pass
+
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.base = f"http://127.0.0.1:{self._server.server_address[1]}"
+        self._thread = threading.Thread(target=self._server.serve_forever, args=(0.02,), daemon=True)
+        self._thread.start()
+
+    def url(self, path: str) -> str:
+        return self.base + path
+
+    def serve(
+        self, path: str, body: str | bytes, status: int = 200, headers: dict[str, str] | None = None
+    ) -> str:
+        """Serve `body` at `path`; returns its URL."""
+        data = body.encode("utf-8") if isinstance(body, str) else body
+        self.routes[path] = Route(status, data, headers or {})
+        return self.url(path)
+
+    def redirect(self, path: str, location: str) -> str:
+        return self.serve(path, b"", 302, {"Location": location})
+
+    def close(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+
+
+def closed_port_url(path: str) -> str:
+    """A URL on 127.0.0.1 where nothing listens: a port that was bound and then released."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    return f"http://127.0.0.1:{port}{path}"
+
+
+@pytest.fixture
+def http_server() -> Iterator[HttpServer]:
+    server = HttpServer()
+    yield server
+    server.close()

@@ -6,14 +6,25 @@ characters, which is also how the YAML parser counts them). Columns count Unicod
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from troupe.errors import LoadError
+
+if TYPE_CHECKING:
+    from troupe.tree import ScalarNode
 
 
 @dataclass(eq=False)
 class SourceFile:
-    path: Path
+    path: Path  # for remote content, the URL's path: never read or written
     text: str
+    url: str | None = None  # set for remote content, which troupe never writes
+    included_by: "ScalarNode | None" = None  # for remote content: the include string that brought it in
+
+    @property
+    def name(self) -> str:
+        """How messages name this source: its URL, or its path."""
+        return self.url if self.url is not None else str(self.path)
 
     @property
     def newline(self) -> str:

@@ -175,9 +175,9 @@ def parse_events(src: SourceFile) -> list[Event]:
     except MarkedYAMLError as e:
         mark = e.problem_mark or e.context_mark
         where = f" (line {mark.line + 1}, column {mark.column + 1})" if mark is not None else ""
-        raise LoadError(f"{src.path}: invalid YAML{where}: {e.problem or e.context}") from None
+        raise LoadError(f"{src.name}: invalid YAML{where}: {e.problem or e.context}") from None
     except YAMLError as e:
-        raise LoadError(f"{src.path}: invalid YAML: {e}") from None
+        raise LoadError(f"{src.name}: invalid YAML: {e}") from None
 
 
 def build_tree(src: SourceFile) -> Node | None:
@@ -208,7 +208,7 @@ class _Builder:
 
     def fail(self, event: Event, message: str) -> LoadError:
         mark = event.start_mark
-        return LoadError(f"{self.src.path} (line {mark.line + 1}, column {mark.column + 1}): {message}")
+        return LoadError(f"{self.src.name} (line {mark.line + 1}, column {mark.column + 1}): {message}")
 
     def stream(self) -> Node | None:
         assert isinstance(self.next(), StreamStartEvent)
@@ -433,7 +433,7 @@ class _Builder:
             ):
                 return pos
             pos -= 1
-        raise LoadError(f"{self.src.path}: cannot locate a sequence entry before offset {hi}")
+        raise LoadError(f"{self.src.name}: cannot locate a sequence entry before offset {hi}")
 
 
 def _resolve_merges(written: MappingNode, merges: list[tuple[Entry, list[MappingNode]]]) -> MappingNode:

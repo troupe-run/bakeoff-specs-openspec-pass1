@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from test_history import events
 
-from conftest import Theatre
+from conftest import HttpServer, Theatre
 from troupe.leaves import leaves
 from troupe.lineage import for_import
 from troupe.loader import load
@@ -268,3 +268,22 @@ def test_set_after_a_hand_added_override_changes_the_override_and_records_both(t
     assert theatre.run("set", "coder.extra", "2").code == 0
     assert theatre.read("agents/coder.yaml") == "temperature: 0.2\n"
     assert added(theatre, 1) == [("set", "coder.extra", None, 1), ("set", "coder.extra", 1, 2)]
+
+
+def test_a_change_to_remote_content_is_recorded_like_a_hand_edit(
+    theatre: Theatre, http_server: HttpServer
+) -> None:
+    url = http_server.serve("/coder.yaml", "model: m1\n")
+    theatre.write("troupe.yml", f"coder: {url}\n")
+    assert theatre.run("get", "coder.model").out == "m1\n"
+    http_server.serve("/coder.yaml", "model: m2\n")
+    assert theatre.run("get", "coder.model").out == "m2\n"
+    last = events(theatre.run("history"))[-1]
+    assert (last["op"], last["path"], last["old"], last["new"], last["via"]) == (
+        "set",
+        "coder.model",
+        "m1",
+        "m2",
+        "file",
+    )
+    assert last["actor"] == {"kind": "unknown", "id": None}
