@@ -47,6 +47,6 @@
 
 ## 7. Integration
 
-- [ ] 7.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`. Verify that all are clean, and show the output
-- [ ] 7.2 Run `openspec validate config-remote-includes-and-schema --strict`. Verify that it reports the change as valid
-- [ ] 7.3 Commit the work on `main` in small steps, with messages that say why (no push, no PR), then archive the change and sync its specs into `openspec/specs`. Verify that `git status` is clean and `git log` shows the commits
+- [x] 7.1 Run `uv run pytest`, `uv run mypy`, `uv run ruff check` and `uv run ruff format --check`. Verify that all are clean, and show the output
+- [x] 7.2 Run `openspec validate config-remote-includes-and-schema --strict`. Verify that it reports the change as valid
+- [x] 7.3 Commit the work on `main` in small steps, with messages that say why (no push, no PR), then archive the change and sync its specs into `openspec/specs`. Verify that `git status` is clean and `git log` shows the commits
