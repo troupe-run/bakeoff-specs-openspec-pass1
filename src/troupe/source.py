@@ -4,6 +4,7 @@ Files are read with `newline=''` so that offsets index the exact characters on d
 characters, which is also how the YAML parser counts them). Columns count Unicode code points.
 """
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -52,6 +53,14 @@ class SourceFile:
 
     def line_text(self, pos: int) -> str:
         return self.text[self.line_start(pos) : self.line_end(pos)]
+
+
+def source_label(file: SourceFile, theatre: Path) -> str:
+    """The file's path relative to the theatre, normalised lexically (symlinks are not resolved); for
+    remote content, its URL."""
+    if file.url is not None:
+        return file.url
+    return Path(os.path.relpath(os.path.abspath(file.path), os.path.abspath(theatre))).as_posix()
 
 
 def read_source(path: Path) -> SourceFile:

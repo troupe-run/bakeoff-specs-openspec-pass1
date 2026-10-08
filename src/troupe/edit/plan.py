@@ -187,7 +187,8 @@ def new_key_target(root: Node, path: Path, value: Data, *, in_include: bool = Fa
 
     A key whose parent lies inside an included value, with no list item between the include and the
     parent, is written as an override of the nearest such include, in the file that holds the include's
-    reference. Anything else, and every key when `in_include` is set (`set --in-include`), goes into the
+    reference. Includes whose reference is itself in remote content are passed over, since that cannot be
+    written. Anything else, and every key when `in_include` is set (`set --in-include`), goes into the
     parent mapping's own file: for a merged mapping, the innermost included one.
     """
     if in_include:
@@ -203,8 +204,8 @@ def new_key_target(root: Node, path: Path, value: Data, *, in_include: bool = Fa
             assert isinstance(node, SequenceNode), segment
             node = node.items[int(segment)].value
             anchor = None  # overrides cannot address list items
-        if node.include is not None:
-            anchor = depth
+        if node.include is not None and node.include.string.file.url is None:
+            anchor = depth  # an include whose reference can take an override: it is in a local file
     if anchor is None:
         return AddKey(path, value)
     return AddOverride(path, path[:anchor], value)

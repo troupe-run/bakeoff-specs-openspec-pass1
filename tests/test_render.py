@@ -7,9 +7,9 @@ import pytest
 
 from conftest import Theatre
 from troupe.loader import load
-from troupe.render import render, source_label
+from troupe.render import render
 from troupe.schema import same
-from troupe.source import SourceFile
+from troupe.source import SourceFile, source_label
 from troupe.tree import build_tree, to_data
 
 CONFIGS = {

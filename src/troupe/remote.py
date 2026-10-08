@@ -6,11 +6,13 @@ same content. The fetch rules (timeout, redirects, status, encoding) are decided
 
 import urllib.request
 from http.client import HTTPMessage
+from pathlib import Path
 from typing import IO
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 
-from troupe.errors import LoadError
+from troupe.errors import LoadError, RemoteWrite
+from troupe.source import SourceFile, source_label
 
 TIMEOUT = 30.0  # seconds, for connecting and for each read
 USER_AGENT = "troupe"
@@ -67,3 +69,22 @@ class Fetcher:
             return body.decode("utf-8")
         except UnicodeDecodeError as e:
             raise LoadError(f"{url}: not valid UTF-8 ({e.reason})") from None
+
+
+def refuse_remote(src: SourceFile, path: str, theatre: Path) -> None:
+    """Raise RemoteWrite if `src` is remote content: troupe never writes to a URL.
+
+    The message names the include written in a local file through which the content is reached (the outermost
+    one, for remote content included by remote content): that is the line the user can change.
+    """
+    if src.url is None:
+        return
+    string = src.included_by
+    assert string is not None, src.url
+    while string.file.url is not None:
+        assert string.file.included_by is not None, string.file.url
+        string = string.file.included_by
+    holder = string.file
+    written = holder.text[string.start : string.end]
+    line = holder.text.count("\n", 0, string.start) + 1
+    raise RemoteWrite(path, src.url, written, source_label(holder, theatre), line)

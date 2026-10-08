@@ -74,3 +74,16 @@ class MergeKeyWrite(WriteRefused):
             f"{path}: {what} the merge key {holder}; troupe never writes merge keys (--expand-alias cannot "
             "help), so edit the file by hand"
         )
+
+
+class RemoteWrite(WriteRefused):
+    """`set` would change content fetched from a URL, which troupe cannot write.
+
+    `include` is the include string as written in the local file `file` at `line`: the line to change instead.
+    """
+
+    def __init__(self, path: str, url: str, include: str, file: str, line: int) -> None:
+        super().__init__(
+            f"{path}: comes from {url}, which troupe cannot change. It is included by {include} in {file} "
+            f"line {line}: change that include line instead (new keys are written as local overrides)"
+        )

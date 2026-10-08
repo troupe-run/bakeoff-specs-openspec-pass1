@@ -28,6 +28,7 @@ from troupe.leaves import diff_leaves, leaves
 from troupe.loader import Config, load
 from troupe.overrides import is_bare, ref_entry
 from troupe.paths import Path, format_path
+from troupe.remote import refuse_remote
 from troupe.schema import Data, same
 from troupe.store import Change
 from troupe.tree import (
@@ -70,11 +71,11 @@ def compute_set(
             # Each round replaces one alias nearer the change, so this ends.
             if not expand_alias or e.in_flow:
                 raise
-            _apply(current, ExpandAlias(e.alias_at), texts)
+            _apply(current, ExpandAlias(e.alias_at), texts, theatre, path)
             current = _reload(theatre, texts, path, config)
     expected = _expected(current.root, path, value)  # an expansion changes no value
     for op in operations:
-        _apply(current, op, texts)
+        _apply(current, op, texts, theatre, path)
         current = _reload(theatre, texts, path, config)
     if texts == original:
         return SetResult({}, [])
@@ -94,18 +95,22 @@ def _reload(theatre: FsPath, texts: dict[FsPath, str], path: Path, config: Confi
         raise WriteRefused(f"{format_path(path)}: the result would not load ({e}); not writing") from None
 
 
-def _apply(config: Config, op: Op, texts: dict[FsPath, str]) -> None:
+def _apply(config: Config, op: Op, texts: dict[FsPath, str], theatre: FsPath, top: Path) -> None:
+    """Apply `op` to `texts`. Every file it would edit is checked first: remote content is never written."""
     where = format_path(op.path)
     if isinstance(op, WriteText):
         node = _node_at(config.root, op.path)
         assert isinstance(node, TextNode)
+        refuse_remote(node.target, format_path(top), theatre)
         texts[node.target.path.resolve()] = to_crlf(op.text) if "\r\n" in node.target.text else op.text
         return
     if isinstance(op, ExpandAlias):
-        src, edits = _expand_alias(config.root, op.path, where)
-        texts[src.path.resolve()] = apply_edits(texts[src.path.resolve()], edits)
-        return
-    for src, edits in _edits(config.root, op, where):
+        file_edits = [_expand_alias(config.root, op.path, where)]
+    else:
+        file_edits = _edits(config.root, op, where)
+    for src, _ in file_edits:
+        refuse_remote(src, format_path(top), theatre)
+    for src, edits in file_edits:
         file_key = src.path.resolve()
         texts[file_key] = apply_edits(texts[file_key], edits)
 

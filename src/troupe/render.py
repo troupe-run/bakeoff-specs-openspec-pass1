@@ -5,7 +5,6 @@ formatting. Scalars are written by the same helpers `set` uses for new values, s
 follow one rule.
 """
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,7 +12,7 @@ from troupe.edit.blocks import literal
 from troupe.edit.scalars import render_key, render_scalar
 from troupe.edit.text import Layout
 from troupe.schema import Scalar
-from troupe.source import SourceFile
+from troupe.source import SourceFile, source_label
 from troupe.tree import MappingNode, Node, ScalarNode, SequenceNode, TextNode
 
 INDENT = 2
@@ -25,14 +24,6 @@ SOURCE_COMMENT = " # from {}"
 class Line:
     text: str
     source: SourceFile | None = None  # set only on a line that holds a scalar value
-
-
-def source_label(file: SourceFile, theatre: Path) -> str:
-    """The file's path relative to the theatre, normalised lexically (symlinks are not resolved); for
-    remote content, its URL."""
-    if file.url is not None:
-        return file.url
-    return Path(os.path.relpath(os.path.abspath(file.path), os.path.abspath(theatre))).as_posix()
 
 
 def render(node: Node, theatre: Path, *, sources: bool) -> str:

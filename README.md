@@ -211,6 +211,22 @@ anything but `http`/`https`.
 A `file:` include inside remote content is relative to that content's URL, like a link in a web page. Remote content
 can never read your local files. `show --sources` names remote values by URL.
 
+troupe cannot write to a URL, so **remote values are read-only**. A `set` that would change or delete a value written
+in remote content, add to or remove from a remote list, change a remote text include, or expand an alias in remote
+content is refused (exit 3), and nothing changes. The message names the include line in your own file to change
+instead:
+
+```
+troupe: agents.coder.model: comes from https://config.example.com/team/coder.yaml, which troupe cannot change.
+It is included by https://config.example.com/team/coder.yaml in .troupe/troupe.yml line 3: change that include line
+instead (new keys are written as local overrides)
+```
+
+(one line in the real output). A value that a local override sets is yours, and `set` changes it in the override.
+A **new key** under a remote include is written as an override next to the include line in your file, as for any
+include. Remote content that includes more remote content gets its override next to the include written in a local
+file. `--in-include` would put the key into the remote file, so it is refused.
+
 **Upgrading:** before step 7, a string such as `homepage: https://example.com/docs.yaml` was a plain string. Now it is
 fetched. Tag it `!literal`, or mark it in the [schema](#schema) with `"format": "uri"`, to keep it a string.
 
@@ -301,7 +317,7 @@ uv run troupe config set coder.model sonnet --theatre /tmp/demo      # exit 3: s
 |---|---|
 | 0 | success |
 | 2 | usage error (bad arguments, path syntax, VALUE or `TROUPE_ACTOR`) |
-| 3 | write refused, so no file changed |
+| 3 | write refused, so no file changed (for example a value from a remote include) |
 | 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, a remote include that cannot be fetched, include cycle, overrides on a text include or on included content that is not a mapping, an alias without an anchor before it, a merge key that names no mapping) |
 | 5 | path not found, or the wrong kind of node for the command |
 
@@ -407,6 +423,21 @@ These are recorded with their reasons in `openspec/changes/archive/2026-10-02-co
     where an override would be written elsewhere. That refuses more than strictly needed, but never writes through
     an anchor.
 47. A new key named `<<` is written quoted (`'<<'`), so it is an ordinary key and never a merge key.
+48. A `file:` include inside remote content is resolved against that content's URL: the step-1 rule says "relative
+    to the file containing it", and that file is remote. Reading a local file named by shared content would let it
+    read your disk.
+49. A refused write to remote content names the outermost include written in a local file, with its file and line,
+    quoted as written: that is the only line you can change.
+50. A new key under nested remote includes becomes an override of the nearest include written in a local file, deep
+    enough to reach the key, since the nearer include's reference is itself remote.
+51. Deleting a key that remote content sets is refused (exit 3) even when an override also sets it, because removing
+    only the override would bring the remote value back (as in decision 29).
+52. `show --sources` names a value from remote content by its URL.
+53. Fetching: a 30-second timeout, redirects followed only to `http`/`https`, a 2xx status and UTF-8 body required,
+    nothing cached between commands, and each URL fetched at most once per command (so a `set` checks its result
+    against the same content it started from).
+54. `watch` does not poll URLs. Remote changes are recorded at the next reconcile, as hand edits (`via` `file`, actor
+    unknown).
 
 ## Development
 
