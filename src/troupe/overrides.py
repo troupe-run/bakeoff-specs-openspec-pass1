@@ -5,7 +5,8 @@ overrides: mappings on both sides merge recursively, anything else in the overri
 keep their order, and keys only the overrides have follow, in their order.
 """
 
-from troupe.tree import Entry, Include, MappingNode, ScalarNode, include_target
+from troupe.includes import include_string
+from troupe.tree import Entry, Include, MappingNode, ScalarNode
 
 REF_KEY = "$ref"
 
@@ -13,7 +14,7 @@ REF_KEY = "$ref"
 def ref_entry(mapping: MappingNode) -> Entry | None:
     """The `$ref` entry that makes `mapping` an include, or None if `mapping` is an ordinary mapping."""
     entry = mapping.get(REF_KEY)
-    if entry is not None and isinstance(entry.value, ScalarNode) and include_target(entry.value) is not None:
+    if entry is not None and isinstance(entry.value, ScalarNode) and include_string(entry.value) is not None:
         return entry
     return None
 

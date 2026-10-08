@@ -43,16 +43,16 @@ See proposal.md for the motivation and `specs/` for the behaviour. Today:
 
 ### D1. `includes.py`: the one place that decides what is an include
 A new module holds the prefixes (`file:`, `https://`, `http://`), `LITERAL_TAG = "!literal"`, and:
-- `include_target(node: ScalarNode) -> str | None`: the include string's target if `node` is an include. A node
+- `include_string(node: ScalarNode) -> str | None`: the include string if `node` is an include. A node
   is not one when it is tagged (any tag, `!literal` included), when the loader marked it a literal (D3), or when its
-  value is not a string with one of the prefixes. `file:` gives the path after the prefix, and a URL gives itself.
+  value is not a string with one of the prefixes.
 - `looks_like_include(value: str) -> bool`: the prefix test alone, used by `set` (D7).
-- `Location = Path | str` (a local directory, or the URL of remote content), with `resolve(base, target)`. A URL
+- `Location = Path | str` (a local directory, or the URL of remote content), with `resolve(base, string)`. A URL
   target is absolute. A `file:` target under a local base is `base / target`, and under a URL base it is
   `urllib.parse.urljoin(base_url, target)`. So remote content can never name a local file.
 - `is_yaml(location)`: `.yml`/`.yaml` suffix, using the URL's path (no query or fragment) for a URL.
 
-`tree.include_target` and `INCLUDE_PREFIX` move here, and `overrides.ref_entry` and the loader import from here.
+`tree.include_target` (now `include_string`) and `INCLUDE_PREFIX` move here, and `overrides.ref_entry` and the loader import from here.
 
 *Alternative*: let the loader pass a predicate everywhere. Rejected: `ref_entry` is also called by `apply.py` on
 trees long after loading, so the decision has to be readable from the node itself (D3).

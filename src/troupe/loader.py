@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from troupe.errors import LoadError
+from troupe.includes import Location, include_string, is_yaml, resolve
 from troupe.overrides import REF_KEY, merge, override_entries, ref_entry
 from troupe.source import SourceFile, read_source
 from troupe.tree import (
@@ -16,12 +17,10 @@ from troupe.tree import (
     SequenceNode,
     TextNode,
     build_tree,
-    include_target,
 )
 
 CONFIG_DIR = ".troupe"
 CONFIG_NAMES = ("troupe.yml", "troupe.yaml")
-YAML_SUFFIXES = (".yml", ".yaml")
 
 
 def state_dir(theatre: Path) -> Path:
@@ -36,10 +35,6 @@ def find_config(theatre: Path) -> Path:
     if len(present) > 1:
         raise LoadError(f"{present[0]} and {present[1]}: both exist; keep only one")
     return present[0]
-
-
-def is_yaml_target(target: str | Path) -> bool:
-    return str(target).endswith(YAML_SUFFIXES)
 
 
 @dataclass(eq=False)
@@ -90,10 +85,10 @@ class _Loader:
     def _expand(self, node: Node, base: Path, stack: tuple[Path, ...]) -> Node:
         match node:
             case ScalarNode():
-                target = include_target(node)
-                if target is None:
+                string = include_string(node)
+                if string is None:
                     return node
-                return self.include(node, base / target, stack)
+                return self.include(node, resolve(base, string), stack)
             case MappingNode():
                 ref = ref_entry(node)
                 for entry in node.entries:
@@ -110,9 +105,9 @@ class _Loader:
         """A mapping-form include: the included content deep-merged with the mapping's other entries."""
         string = ref.value
         assert isinstance(string, ScalarNode)
-        target = include_target(string)
-        assert target is not None
-        path = base / target
+        include = include_string(string)
+        assert include is not None
+        path = resolve(base, include)
         root = self.include(string, path, stack)
         entries = override_entries(mapping)
         if entries:
@@ -129,14 +124,15 @@ class _Loader:
         root.in_flow = mapping.in_flow
         return root
 
-    def include(self, string: ScalarNode, path: Path, stack: tuple[Path, ...]) -> Node:
+    def include(self, string: ScalarNode, path: Location, stack: tuple[Path, ...]) -> Node:
+        assert isinstance(path, Path), path
         key = path.resolve()
         if key in stack:
             raise LoadError(f"{path}: include cycle ({' -> '.join(str(p) for p in (*stack, key))})")
         if key not in self.overlay and not path.exists():
             raise LoadError(f"{path}: included file not found (from {string.file.path})")
         src = self.read(path)
-        if not is_yaml_target(path):
+        if not is_yaml(path):
             return TextNode(
                 file=string.file,
                 start=string.start,

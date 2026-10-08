@@ -37,10 +37,10 @@ from troupe.source import SourceFile
 
 @dataclass(eq=False, kw_only=True)
 class Include:
-    """How a node came into the tree through `file:`: the include string and the file it names."""
+    """How a node came into the tree through an include: the include string and the file or URL it names."""
 
     string: "ScalarNode"
-    target: Path
+    target: Path | str  # a local file, or a URL
     overrides: "MappingNode | None" = None  # mapping form: the `$ref` mapping, as written where it is
 
 
@@ -82,6 +82,7 @@ class ScalarNode(Node):
     tagged: bool = False
     block: BlockLayout | None = None
     opaque: bool = False  # we could not reproduce its layout; refuse to edit it
+    literal: bool = False  # set by the loader where the schema says the string is a URI, not an include
 
 
 @dataclass(eq=False, kw_only=True)
@@ -130,7 +131,6 @@ class SequenceNode(Node):
     items: list[Item] = field(default_factory=list)
 
 
-INCLUDE_PREFIX = "file:"
 MERGE_KEY = "<<"
 
 
@@ -145,13 +145,6 @@ def merged_in(mapping: MappingNode, key: str) -> Entry | None:
     if written is None or written.get(key) is not None or mapping.get(key) is None:
         return None
     return next(e for e in written.entries if is_merge_key(e.key_node))
-
-
-def include_target(node: ScalarNode) -> str | None:
-    """The path named by an include string, or None if the scalar is not an include."""
-    if isinstance(node.value, str) and node.value.startswith(INCLUDE_PREFIX) and not node.tagged:
-        return node.value[len(INCLUDE_PREFIX) :]
-    return None
 
 
 def to_data(node: Node) -> Data:

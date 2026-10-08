@@ -2,8 +2,8 @@
 
 ## 1. Setup and one place for the include decision
 
-- [ ] 1.1 Add `jsonschema>=4.18,<5` with `uv add` and `types-jsonschema` to the dev group (D9). Verify that `uv sync` succeeds, that `uv run python -c "import jsonschema, referencing"` runs, and that `uv run mypy` is still clean
-- [ ] 1.2 Create `src/troupe/includes.py` with the prefixes, `LITERAL_TAG`, `include_target`, `looks_like_include`, `Location`, `resolve` and `is_yaml` (D1). Move `tree.include_target`/`INCLUDE_PREFIX` and `loader.is_yaml_target` there, and point `overrides.ref_entry` and the loader at it. Keep `https://`/`http://` out of `include_target` for now, so behaviour is unchanged. Verify that the full `uv run pytest` suite and `uv run mypy` pass unchanged
+- [x] 1.1 Add `jsonschema>=4.18,<5` with `uv add` and `types-jsonschema` to the dev group (D9). Verify that `uv sync` succeeds, that `uv run python -c "import jsonschema, referencing"` runs, and that `uv run mypy` is still clean
+- [x] 1.2 Create `src/troupe/includes.py` with the prefixes, `LITERAL_TAG`, `include_target`, `looks_like_include`, `Location`, `resolve` and `is_yaml` (D1). Move `tree.include_target`/`INCLUDE_PREFIX` and `loader.is_yaml_target` there, and point `overrides.ref_entry` and the loader at it. Keep `https://`/`http://` out of `include_target` for now, so behaviour is unchanged. Verify that the full `uv run pytest` suite and `uv run mypy` pass unchanged
 
 ## 2. The `!literal` tag
 
