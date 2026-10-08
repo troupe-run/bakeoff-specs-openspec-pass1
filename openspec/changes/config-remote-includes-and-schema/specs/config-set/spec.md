@@ -76,8 +76,8 @@ removed with the scalar. An untagged scalar changed to a string that must be wri
 front of the new scalar. Replacing a scalar with any other tag remains refused (exit 3).
 
 #### Scenario: Keeping the tag
-- **WHEN** the file is `docs: !literal https://a.example.invalid  # c\n` and `set docs other` runs
-- **THEN** the file becomes `docs: !literal other  # c\n`
+- **WHEN** the file is `docs: !literal https://a.example.invalid\nb: 1\n` and `set docs other` runs
+- **THEN** the file becomes `docs: !literal other\nb: 1\n`
 
 #### Scenario: Dropping the tag for a non-string
 - **WHEN** the file is `a: !literal file:x\n` and `set a 5` runs

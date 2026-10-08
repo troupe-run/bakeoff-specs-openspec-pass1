@@ -186,6 +186,20 @@ cat /tmp/demo/.troupe/agents/coder.yaml
 Mapping-form includes need step 5 or later. Older code reads `$ref` as an ordinary key, so going back means
 rewriting them as one-line includes (and moving the overrides into the shared file) by hand.
 
+### Literal strings
+
+A string that only looks like an include is written with the `!literal` tag. It is then an ordinary string, in
+any quoting style or as a block scalar, and nothing is read or fetched:
+
+```sh
+printf 'docs: !literal file:README.md\n' > /tmp/demo/.troupe/troupe.yml
+uv run troupe config get docs --theatre /tmp/demo                  # file:README.md
+uv run troupe config set docs file:CHANGES.md --theatre /tmp/demo  # docs: !literal file:CHANGES.md
+```
+
+`set` keeps the tag when it changes the string, and removes it when the new value is not a string (a number, say),
+since it would turn that into a string. `!literal` on a mapping or list fails to load (exit 4).
+
 ### Anchors and aliases
 
 A value can be shared within one file with a YAML anchor (`&name`) and aliases (`*name`) to it. An alias has the value
@@ -295,8 +309,8 @@ These are recorded with their reasons in `openspec/changes/archive/2026-10-02-co
    `history`), and its events are kept even if the command then fails with exit 3 or 5.
 7. `history PATH` with no matches prints nothing and exits 0. `.inf`/`.nan` appear in JSON as the strings `".inf"`,
    `"-.inf"` and `".nan"`.
-8. Non-core tags fail to load (exit 4). Anchors, aliases and merge keys load: see
-   [Anchors and aliases](#anchors-and-aliases).
+8. Non-core tags fail to load (exit 4), except `!literal` on a scalar: see [Literal strings](#literal-strings).
+   Anchors, aliases and merge keys load: see [Anchors and aliases](#anchors-and-aliases).
 9. A new key that would read back as a non-string when written plain (e.g. `true`) is quoted.
 10. Every `set` is verified before writing: the edited text is re-read and must give exactly the intended
     configuration, otherwise nothing is written (exit 3).

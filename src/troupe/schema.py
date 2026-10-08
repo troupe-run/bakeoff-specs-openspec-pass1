@@ -7,6 +7,9 @@ scalar is printed by `show`, and how a non-string is written into a file.
 import math
 import re
 
+# A local tag meaning "this scalar is a string, taken literally": never an include.
+LITERAL_TAG = "!literal"
+
 type Scalar = bool | int | float | str | None
 type Data = Scalar | dict[str, "Data"] | list["Data"]
 
@@ -47,7 +50,7 @@ def resolve_plain(text: str) -> Scalar:
 def resolve_tagged(text: str, tag: str) -> Scalar:
     """The value of a scalar with an explicit core-schema tag; ValueError for any other tag or mismatch."""
     short = tag.removeprefix("tag:yaml.org,2002:")
-    if tag == "!" or short == "str":
+    if tag in ("!", LITERAL_TAG) or short == "str":
         return text
     value = resolve_plain(text)
     if short == "null" and value is None:

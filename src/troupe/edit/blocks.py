@@ -6,7 +6,7 @@ from pathlib import Path
 from troupe.edit.scalars import is_printable, render_key, render_scalar
 from troupe.edit.text import Layout
 from troupe.errors import LoadError
-from troupe.schema import Data
+from troupe.schema import LITERAL_TAG, Data
 from troupe.source import SourceFile
 from troupe.tree import Entry, Item, MappingNode, Node, ScalarNode, SequenceNode, build_tree
 
@@ -173,8 +173,11 @@ def copy_value(node: Node, *, owner_col: int, owner_is_key: bool, layout: Layout
         return Rendered("{}" if isinstance(node, MappingNode) else "[]")
     assert isinstance(node, ScalarNode)
     text = node.file.text[node.start : node.end]
-    if node.block is None and not node.tagged and "\n" not in text and "\r" not in text:
-        return Rendered(text)
+    if node.block is None and "\n" not in text and "\r" not in text:
+        if node.literal_tag is not None:
+            return Rendered(LITERAL_TAG + " " + text if text else LITERAL_TAG)
+        if not node.tagged:
+            return Rendered(text)
     return render_value(node.value, owner_col=owner_col, owner_is_key=owner_is_key, layout=layout)
 
 

@@ -3,6 +3,7 @@
 Each returns the text edits for one source file. They never touch bytes outside what the change needs.
 """
 
+import dataclasses
 from dataclasses import dataclass
 
 from troupe.blockscalar import BlockLayout
@@ -57,10 +58,12 @@ class Slot:
         else:
             assert self.item is not None and self.item.dash is not None
             end = self.item.dash + 1
-        anchor = self.node.anchor
         src = self.node.file
-        if anchor is not None and anchor.start >= end and src.line_start(anchor.start) == src.line_start(end):
-            return anchor.end
+        anchor = self.node.anchor
+        tag = self.node.literal_tag if isinstance(self.node, ScalarNode) else None
+        for prop in (anchor, tag):  # past the anchor and the `!literal` tag that are on that line
+            if prop is not None and prop.start >= end and src.line_start(prop.start) == src.line_start(end):
+                end = max(end, prop.end)
         return end
 
 
@@ -75,8 +78,11 @@ def _scalar_style(node: Node | None) -> str | None:
 
 def replace(slot: Slot, value: Data, where: str) -> FileEdits:
     node = slot.node
+    if isinstance(node, ScalarNode) and node.literal_tag is not None and not isinstance(value, str):
+        slot = _without_literal_tag(slot, node)  # the tag would make the new value a string: it goes too
+        node = slot.node
     src = node.file
-    if isinstance(node, ScalarNode) and (node.opaque or node.tagged):
+    if isinstance(node, ScalarNode) and (node.opaque or (node.tagged and node.literal_tag is None)):
         raise WriteRefused(f"{where}: cannot rewrite this value safely (unsupported tag or block layout)")
     if node.in_flow:
         text = flow_text(value, _scalar_style(node), flow=True)
@@ -89,6 +95,15 @@ def replace(slot: Slot, value: Data, where: str) -> FileEdits:
     if isinstance(node, ScalarNode) and node.start == node.end:
         return src, _replace_empty(slot, value, layout)
     return src, _replace_inline(slot, value, layout)
+
+
+def _without_literal_tag(slot: Slot, node: ScalarNode) -> Slot:
+    """The slot with its scalar's span widened to take in the `!literal` tag in front of it."""
+    tag = node.literal_tag
+    assert tag is not None
+    block = dataclasses.replace(node.block, start=tag.start) if node.block is not None else None
+    bare = dataclasses.replace(node, start=tag.start, tagged=False, literal_tag=None, block=block)
+    return Slot(node=bare, parent=slot.parent, entry=slot.entry, item=slot.item)
 
 
 def _replace_empty(slot: Slot, value: Data, layout: Layout) -> list[Edit]:

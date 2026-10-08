@@ -31,7 +31,7 @@ from ruamel.yaml.events import (
 
 from troupe.blockscalar import BlockLayout, parse_block
 from troupe.errors import LoadError
-from troupe.schema import Data, Scalar, key_text, resolve_plain, resolve_tagged
+from troupe.schema import LITERAL_TAG, Data, Scalar, key_text, resolve_plain, resolve_tagged
 from troupe.source import SourceFile
 
 
@@ -49,6 +49,14 @@ class Anchor:
     """The `&name` written in front of a node: its name and where the text is."""
 
     name: str
+    start: int
+    end: int
+
+
+@dataclass(eq=False, kw_only=True)
+class Tag:
+    """A `!literal` tag written in front of a scalar: where its text is (outside the scalar's span)."""
+
     start: int
     end: int
 
@@ -80,6 +88,7 @@ class ScalarNode(Node):
     value: Scalar
     style: str | None  # None (plain), "'", '"', "|" or ">"
     tagged: bool = False
+    literal_tag: Tag | None = None  # a `!literal` tag, outside the span, so replacing a string keeps it
     block: BlockLayout | None = None
     opaque: bool = False  # we could not reproduce its layout; refuse to edit it
     literal: bool = False  # set by the loader where the schema says the string is a URI, not an include
@@ -263,8 +272,11 @@ class _Builder:
 
     def after_anchor(self, anchor: Anchor) -> int:
         """The offset where the anchored node's own text starts: past spaces, comments and line breaks."""
+        return self.after_properties(anchor.end)
+
+    def after_properties(self, pos: int) -> int:
+        """The offset past spaces, comments and line breaks from `pos` (the end of an anchor or tag)."""
         text = self.src.text
-        pos = anchor.end
         while pos < len(text):
             ch = text[pos]
             if ch in " \t\r\n":
@@ -294,7 +306,13 @@ class _Builder:
         anchor = self.anchor_of(event)
         if anchor is not None and anchor.start == start:
             # A tag before the anchor stays in the (never rewritten) span; an empty scalar ends at its anchor.
-            start = min(self.after_anchor(anchor), end)
+            start = min(self.after_properties(anchor.end), end)
+        literal_tag: Tag | None = None
+        if tagged and str(event.tag) == LITERAL_TAG and self.src.text.startswith(LITERAL_TAG, start):
+            literal_tag = Tag(start=start, end=start + len(LITERAL_TAG))
+            start = min(self.after_properties(literal_tag.end), end)
+            if anchor is not None and anchor.start == start:
+                start = min(self.after_properties(anchor.end), end)
         node = ScalarNode(
             file=self.src,
             start=start,
@@ -304,13 +322,18 @@ class _Builder:
             value=value,
             style=style,
             tagged=tagged,
+            literal_tag=literal_tag,
             anchor=anchor,
         )
         if style in ("|", ">"):
             layout = parse_block(self.src, start, owner_col)
             node.block = layout
             node.end = layout.content_end
-            node.opaque = tagged or layout.value() != text or (style == ">" and layout.more_indented)
+            node.opaque = (
+                (tagged and literal_tag is None)
+                or layout.value() != text
+                or (style == ">" and layout.more_indented)
+            )
         return node
 
     def collection_tag_ok(self, event: MappingStartEvent | SequenceStartEvent, kind: str) -> None:

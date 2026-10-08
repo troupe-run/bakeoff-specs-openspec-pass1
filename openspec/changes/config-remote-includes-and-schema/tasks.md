@@ -7,10 +7,10 @@
 
 ## 2. The `!literal` tag
 
-- [ ] 2.1 In `tree.py`, add `ScalarNode.tag` (the tag as written, with `tagged` derived from it) and accept `!literal` on scalars as `!!str`. A `!literal` mapping or list still fails in `collection_tag_ok`, and other non-core tags still fail (D4). Verify with the tests in 2.2
-- [ ] 2.2 Add `tests/test_literal_tag.py` (through the real CLI), covering the "The `!literal` tag" scenarios (literal strings in plain, quoted and block form, `!literal 5` as the string `'5'` in `show`, a collection tagged `!literal` exiting 4 naming the file, `!secret` exiting 4) and "A tagged include string is a literal" with missing targets. Verify that they pass, and that the include-string test fails if `include_target` stops checking tags
-- [ ] 2.3 In `ops.replace` and the scalar writers, keep a `!literal` tag when its scalar is changed to a string (rewrite only the text after `!literal `), and drop it with the scalar for a non-string. Other tags stay refused. Make `blocks.copy_value` copy a tagged single-line scalar from its source text (D6). Add byte-exact tests for "Keeping the tag", "Dropping the tag for a non-string", a `!literal` block scalar changed, and `--expand-alias` of an anchored `!literal file:x` staying literal. Verify that they pass
-- [ ] 2.4 README: describe `!literal`, and change decision 8 ("non-core tags fail to load") to name the exception. Verify that a README example with `!literal` runs as written against `/tmp/demo`
+- [x] 2.1 In `tree.py`, add `ScalarNode.tag` (the tag as written, with `tagged` derived from it) and accept `!literal` on scalars as `!!str`. A `!literal` mapping or list still fails in `collection_tag_ok`, and other non-core tags still fail (D4). Verify with the tests in 2.2
+- [x] 2.2 Add `tests/test_literal_tag.py` (through the real CLI), covering the "The `!literal` tag" scenarios (literal strings in plain, quoted and block form, `!literal 5` as the string `'5'` in `show`, a collection tagged `!literal` exiting 4 naming the file, `!secret` exiting 4) and "A tagged include string is a literal" with missing targets. Verify that they pass, and that the include-string test fails if `include_target` stops checking tags
+- [x] 2.3 In `ops.replace` and the scalar writers, keep a `!literal` tag when its scalar is changed to a string (rewrite only the text after `!literal `), and drop it with the scalar for a non-string. Other tags stay refused. Make `blocks.copy_value` copy a tagged single-line scalar from its source text (D6). Add byte-exact tests for "Keeping the tag", "Dropping the tag for a non-string", a `!literal` block scalar changed, and `--expand-alias` of an anchored `!literal file:x` staying literal. Verify that they pass
+- [x] 2.4 README: describe `!literal`, and change decision 8 ("non-core tags fail to load") to name the exception. Verify that a README example with `!literal` runs as written against `/tmp/demo`
 
 ## 3. Remote includes when loading
 
