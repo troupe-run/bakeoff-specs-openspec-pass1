@@ -244,6 +244,35 @@ uv run troupe config set docs file:CHANGES.md --theatre /tmp/demo  # docs: !lite
 `set` keeps the tag when it changes the string, and removes it when the new value is not a string (a number, say),
 since it would turn that into a string. `!literal` on a mapping or list fails to load (exit 4).
 
+### Schema
+
+A theatre can describe its configuration with a [JSON Schema](https://json-schema.org/) (draft 2020-12) in
+`.troupe/troupe.schema.json`. When the file exists, it does two things:
+
+- **It marks URL settings as literals.** A string whose schema has `"format": "uri"` is a plain string, never an
+  include, whatever it starts with. troupe finds a value's schema by following `properties` (then
+  `additionalProperties`) for each mapping key and `items` for each list index, from the top. It follows nothing
+  else, so `$ref`, `allOf` and the like are not used for this. A value reached through an alias is judged where its
+  anchor is written.
+- **It checks the configuration.** The loaded configuration, with includes resolved, must be valid, or every command
+  fails to load (exit 4), naming the schema file and a failing path. A `set` whose result would not be valid is
+  refused (exit 3). `format` is not checked, as draft 2020-12 specifies by default.
+
+```sh
+cat > /tmp/demo/.troupe/troupe.schema.json <<'JSON'
+{"type": "object",
+ "properties": {"endpoint": {"type": "string", "format": "uri"},
+                "temperature": {"type": "number"}}}
+JSON
+printf 'endpoint: https://api.example.com/v1.yaml\ntemperature: 0.2\n' > /tmp/demo/.troupe/troupe.yml
+uv run troupe config get endpoint --theatre /tmp/demo           # https://api.example.com/v1.yaml (not fetched)
+uv run troupe config set temperature hot --theatre /tmp/demo    # exit 3: not valid against the schema
+```
+
+A schema that is not valid JSON, or not a valid draft 2020-12 schema, fails to load (exit 4). So does one with a
+`$ref` to anything outside the file, because troupe never fetches schemas. Its `$schema` keyword is ignored. `watch`
+also watches the schema file, since editing it can change what is an include.
+
 ### Anchors and aliases
 
 A value can be shared within one file with a YAML anchor (`&name`) and aliases (`*name`) to it. An alias has the value
@@ -317,8 +346,8 @@ uv run troupe config set coder.model sonnet --theatre /tmp/demo      # exit 3: s
 |---|---|
 | 0 | success |
 | 2 | usage error (bad arguments, path syntax, VALUE or `TROUPE_ACTOR`) |
-| 3 | write refused, so no file changed (for example a value from a remote include) |
-| 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, a remote include that cannot be fetched, include cycle, overrides on a text include or on included content that is not a mapping, an alias without an anchor before it, a merge key that names no mapping) |
+| 3 | write refused, so no file changed (for example a value from a remote include, or a result the schema rejects) |
+| 4 | the configuration cannot be loaded (missing or duplicate config file, invalid YAML, missing include, a remote include that cannot be fetched, include cycle, overrides on a text include or on included content that is not a mapping, an alias without an anchor before it, a merge key that names no mapping, an unusable schema file, a configuration that is not valid against the schema) |
 | 5 | path not found, or the wrong kind of node for the command |
 
 On failure stdout is empty and stderr names the path or file involved.
@@ -438,6 +467,14 @@ These are recorded with their reasons in `openspec/changes/archive/2026-10-02-co
     against the same content it started from).
 54. `watch` does not poll URLs. Remote changes are recorded at the next reconcile, as hand edits (`via` `file`, actor
     unknown).
+55. The schema is always read as draft 2020-12 (its `$schema` is ignored), `format` is not checked, and a `$ref` to
+    anything outside the schema file fails to load: the contract names 2020-12, the draft makes `format` an
+    annotation by default, and fetching a schema would add a second, unannounced network dependency.
+56. A string is judged `format: uri` or not at its position in the loaded configuration, with includes resolved. The
+    `$ref` string of a mapping-form include is at `<path>.$ref`, where it is written. A node reached through an alias
+    is judged where its anchor is written.
+57. `set` checks the schema once, on its final result, so a change made in several steps is not refused for a state
+    in between.
 
 ## Development
 

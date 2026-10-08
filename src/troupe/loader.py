@@ -9,6 +9,7 @@ from troupe.errors import LoadError
 from troupe.includes import Location, include_string, is_yaml, resolve
 from troupe.overrides import REF_KEY, merge, override_entries, ref_entry
 from troupe.remote import Fetcher
+from troupe.schema_file import Position, Schema
 from troupe.source import SourceFile, read_source
 from troupe.tree import (
     Entry,
@@ -19,6 +20,7 @@ from troupe.tree import (
     SequenceNode,
     TextNode,
     build_tree,
+    to_data,
 )
 
 CONFIG_DIR = ".troupe"
@@ -48,24 +50,40 @@ class Config:
     # files `watch` polls) can touch a URL.
     remote: dict[str, SourceFile] = field(default_factory=dict)
     fetcher: Fetcher = field(default_factory=Fetcher)  # reuse it to see the same remote content again
+    schema: Schema | None = None  # the theatre's `.troupe/troupe.schema.json`, if it has one
 
 
-def load(theatre: Path, overlay: Mapping[Path, str] | None = None, fetcher: Fetcher | None = None) -> Config:
+def load(
+    theatre: Path,
+    overlay: Mapping[Path, str] | None = None,
+    fetcher: Fetcher | None = None,
+    *,
+    validate: bool = True,
+) -> Config:
     """Load the configuration. `overlay` maps resolved paths to text used instead of the file on disk.
 
     Remote content comes from `fetcher` (a new one fetches afresh), so a reload sees what the last load saw.
+    With `validate`, the result must be valid against the schema; `set` checks only its final result.
     """
-    loader = _Loader(overlay or {}, fetcher or Fetcher())
     path = find_config(theatre)
+    schema = Schema.read(state_dir(theatre))
+    loader = _Loader(overlay or {}, fetcher or Fetcher(), schema)
     src = loader.read(path)
     root = build_tree(src)
     if root is None:
         root = MappingNode(
             file=src, start=len(src.text), end=len(src.text), in_flow=False, owner_col=-1, flow_style=False
         )
-    root = loader.expand(root, path.parent, (path.resolve(),))
+    root = loader.expand(root, path.parent, (path.resolve(),), ())
+    if validate and schema is not None:
+        schema.validate(to_data(root))
     return Config(
-        root=root, config_path=path, files=loader.files, remote=loader.remote, fetcher=loader.fetcher
+        root=root,
+        config_path=path,
+        files=loader.files,
+        remote=loader.remote,
+        fetcher=loader.fetcher,
+        schema=schema,
     )
 
 
@@ -73,9 +91,10 @@ type _Key = Path | str  # a resolved local path, or a URL: what include cycles a
 
 
 class _Loader:
-    def __init__(self, overlay: Mapping[Path, str], fetcher: Fetcher) -> None:
+    def __init__(self, overlay: Mapping[Path, str], fetcher: Fetcher, schema: Schema | None) -> None:
         self.overlay = overlay
         self.fetcher = fetcher
+        self.schema = schema
         self.files: dict[Path, SourceFile] = {}
         self.remote: dict[str, SourceFile] = {}
         # Each node expanded so far, by identity: a node reached again through an alias is expanded once.
@@ -97,34 +116,53 @@ class _Loader:
         self.remote[url] = src
         return src
 
-    def expand(self, node: Node, base: Location, stack: tuple[_Key, ...]) -> Node:
-        """Expand the includes in `node`; `base` is the directory (or URL) its includes are relative to."""
+    def expand(self, node: Node, base: Location, stack: tuple[_Key, ...], position: Position) -> Node:
+        """Expand the includes in `node`, which is at `position` in the configuration; `base` is the directory
+        (or URL) its includes are relative to.
+
+        A node reached again through an alias is not expanded again, so it is judged where it is first
+        reached: where its anchor is written.
+        """
         done = self.expanded.get(id(node))
         if done is None:
-            done = self.expanded[id(node)] = self._expand(node, base, stack)
+            done = self.expanded[id(node)] = self._expand(node, base, stack, position)
         return done
 
-    def _expand(self, node: Node, base: Location, stack: tuple[_Key, ...]) -> Node:
+    def mark_literal(self, node: Node, position: Position) -> None:
+        """Mark an include-looking string at a position the schema says is a URI: it is a literal."""
+        if (
+            isinstance(node, ScalarNode)
+            and self.schema is not None
+            and include_string(node) is not None
+            and self.schema.is_uri(position)
+        ):
+            node.literal = True
+
+    def _expand(self, node: Node, base: Location, stack: tuple[_Key, ...], position: Position) -> Node:
         match node:
             case ScalarNode():
+                self.mark_literal(node, position)
                 string = include_string(node)
                 if string is None:
                     return node
-                return self.include(node, resolve(base, string), stack)
+                return self.include(node, resolve(base, string), stack, position)
             case MappingNode():
+                written_ref = node.get(REF_KEY)
+                if written_ref is not None:
+                    self.mark_literal(written_ref.value, (*position, REF_KEY))
                 ref = ref_entry(node)
                 for entry in node.entries:
                     if entry is not ref:
-                        entry.value = self.expand(entry.value, base, stack)
+                        entry.value = self.expand(entry.value, base, stack, (*position, entry.key))
                 if ref is not None:
-                    return self.include_mapping(node, ref, base, stack)
+                    return self.include_mapping(node, ref, base, stack, position)
             case SequenceNode():
-                for item in node.items:
-                    item.value = self.expand(item.value, base, stack)
+                for index, item in enumerate(node.items):
+                    item.value = self.expand(item.value, base, stack, (*position, index))
         return node
 
     def include_mapping(
-        self, mapping: MappingNode, ref: Entry, base: Location, stack: tuple[_Key, ...]
+        self, mapping: MappingNode, ref: Entry, base: Location, stack: tuple[_Key, ...], position: Position
     ) -> Node:
         """A mapping-form include: the included content deep-merged with the mapping's other entries."""
         string = ref.value
@@ -132,7 +170,7 @@ class _Loader:
         include = include_string(string)
         assert include is not None
         target = resolve(base, include)
-        root = self.include(string, target, stack)
+        root = self.include(string, target, stack, position)
         entries = override_entries(mapping)
         if entries:
             if isinstance(root, TextNode):
@@ -149,7 +187,9 @@ class _Loader:
         root.in_flow = mapping.in_flow
         return root
 
-    def include(self, string: ScalarNode, target: Location, stack: tuple[_Key, ...]) -> Node:
+    def include(
+        self, string: ScalarNode, target: Location, stack: tuple[_Key, ...], position: Position
+    ) -> Node:
         key: _Key = target if isinstance(target, str) else target.resolve()
         if key in stack:
             raise LoadError(f"{target}: include cycle ({' -> '.join(str(p) for p in (*stack, key))})")
@@ -176,7 +216,7 @@ class _Loader:
         root = build_tree(src)
         if root is None:
             root = ScalarNode(file=src, start=0, end=0, in_flow=False, owner_col=-1, value=None, style=None)
-        root = self.expand(root, base, (*stack, key))
+        root = self.expand(root, base, (*stack, key), position)
         root.include = Include(string=string, target=target)
         root.in_flow = string.in_flow
         return root

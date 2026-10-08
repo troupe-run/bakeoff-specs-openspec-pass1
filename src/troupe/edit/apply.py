@@ -83,6 +83,11 @@ def compute_set(
         raise WriteRefused(
             f"{format_path(path)}: the edited files would not read back as intended; not writing"
         )
+    if current.schema is not None:
+        try:
+            current.schema.validate(to_data(current.root))
+        except LoadError as e:
+            raise WriteRefused(f"{format_path(path)}: not writing, since {e}") from None
     writes = {current.files[k].path: t for k, t in texts.items() if t != original.get(k)}
     return SetResult(writes, diff_leaves(leaves(to_data(config.root)), leaves(to_data(current.root))))
 
@@ -90,7 +95,8 @@ def compute_set(
 def _reload(theatre: FsPath, texts: dict[FsPath, str], path: Path, config: Config) -> Config:
     """The configuration from the edited texts, with the same remote content `config` was loaded with."""
     try:
-        return load(theatre, overlay=texts, fetcher=config.fetcher)
+        # Validated once, at the end: a step of a multi-operation set may be invalid on its own.
+        return load(theatre, overlay=texts, fetcher=config.fetcher, validate=False)
     except LoadError as e:
         raise WriteRefused(f"{format_path(path)}: the result would not load ({e}); not writing") from None
 

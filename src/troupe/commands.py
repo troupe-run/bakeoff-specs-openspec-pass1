@@ -20,6 +20,7 @@ from troupe.loader import CONFIG_NAMES, Config, find_config, load, state_dir
 from troupe.paths import Path, format_path, is_index
 from troupe.render import render
 from troupe.schema import Data, Scalar, show_text
+from troupe.schema_file import SCHEMA_NAME
 from troupe.source import read_source
 from troupe.store import ConfigStore
 from troupe.sync import reconcile
@@ -204,12 +205,15 @@ def _read_files(paths: Iterable[FsPath]) -> Snapshot:
 
 
 def _baseline(theatre: FsPath, config: Config) -> Snapshot:
-    """The watched files as they were when `config` was loaded: every file it read, plus both config names.
+    """The watched files as they were when `config` was loaded: every local file it read, plus both config
+    names and the schema file.
 
     Using the loader's own texts means no edit can slip in between loading and starting to watch.
     """
     snapshot: Snapshot = {path: src.text for path, src in config.files.items()}
-    for name in CONFIG_NAMES:
+    if config.schema is not None:
+        snapshot[config.schema.path.resolve()] = config.schema.text
+    for name in (*CONFIG_NAMES, SCHEMA_NAME):  # whether or not they exist now
         snapshot.setdefault((state_dir(theatre) / name).resolve(), None)
     return snapshot
 

@@ -342,3 +342,25 @@ def test_file_included_through_ref_is_watched(theatre: Theatre, watching: Callab
     start = time.monotonic()
     theatre.write("agents/coder.yaml", "model: m2\n")
     recorded_within(theatre, 2, [("set", "coder.model", "m1", "m2")], start)
+
+
+ENDPOINT_URI = '{"properties": {"endpoint": {"format": "uri"}}}'
+
+
+def test_creating_the_schema_file_is_reconciled(theatre: Theatre, watching: Callable[[], Watch]) -> None:
+    theatre.write("troupe.yml", "endpoint: file:e.md\n")
+    theatre.write("e.md", "x\n")
+    watching()
+    start = time.monotonic()
+    theatre.write("troupe.schema.json", ENDPOINT_URI)
+    recorded_within(theatre, 1, [("set", "endpoint", "x\n", "file:e.md")], start)
+
+
+def test_editing_the_schema_file_is_reconciled(theatre: Theatre, watching: Callable[[], Watch]) -> None:
+    theatre.write("troupe.yml", "endpoint: file:e.md\n")
+    theatre.write("e.md", "x\n")
+    theatre.write("troupe.schema.json", ENDPOINT_URI)
+    watching()
+    start = time.monotonic()
+    theatre.write("troupe.schema.json", "{}")
+    recorded_within(theatre, 1, [("set", "endpoint", "file:e.md", "x\n")], start)
