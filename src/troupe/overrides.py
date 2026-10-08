@@ -6,6 +6,7 @@ keep their order, and keys only the overrides have follow, in their order.
 """
 
 from troupe.includes import include_string
+from troupe.schema import Literal
 from troupe.tree import Entry, Include, MappingNode, ScalarNode
 
 REF_KEY = "$ref"
@@ -28,7 +29,13 @@ def override_entries(mapping: MappingNode) -> list[Entry]:
 def is_bare(include: Include, value: object) -> bool:
     """Whether `value` is the include's own string and the include has no overrides, so it means the same."""
     no_overrides = include.overrides is None or not override_entries(include.overrides)
-    return no_overrides and isinstance(value, str) and value == include.string.value
+    # A `Literal` is a string meant literally, never "the same include" (`set` without `--include`).
+    return (
+        no_overrides
+        and isinstance(value, str)
+        and not isinstance(value, Literal)
+        and value == include.string.value
+    )
 
 
 def merge(base: MappingNode, override: MappingNode, entries: list[Entry]) -> MappingNode:

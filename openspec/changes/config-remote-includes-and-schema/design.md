@@ -132,7 +132,8 @@ picks the nearest include to override, so the override lands next to the nearest
 touch. That is decided in `apply`, and checking where the edit is made cannot miss a case.
 
 ### D6. Writing `!literal`
-`edit/scalars.py` gets `Literal(str)`, a marker subclass meaning "write this string tagged `!literal`". The scalar
+`schema.py` (where scalar types are decided) gets `Literal(str)`, a marker subclass meaning "write this string
+tagged `!literal`". The scalar
 writers (`render_scalar`, and `blocks.literal` / `render_value` for block scalars) write `!literal ` in front of
 the text they would write for the plain string. `ops.replace` on a scalar whose `tag` is `!literal`, given a
 string, rewrites only the text after the tag and the space that follows it, writing the string untagged (a

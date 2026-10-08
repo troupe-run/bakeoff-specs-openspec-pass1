@@ -3,10 +3,10 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from troupe.edit.scalars import is_printable, render_key, render_scalar
+from troupe.edit.scalars import is_printable, render_key, render_scalar, tagged
 from troupe.edit.text import Layout
 from troupe.errors import LoadError
-from troupe.schema import LITERAL_TAG, Data
+from troupe.schema import LITERAL_TAG, Data, Literal
 from troupe.source import SourceFile
 from troupe.tree import Entry, Item, MappingNode, Node, ScalarNode, SequenceNode, build_tree
 
@@ -101,7 +101,7 @@ def render_value(
     if isinstance(value, str) and is_multiline(value):
         block = literal(value, owner_col, layout)
         if block is not None:
-            return block
+            return Rendered(tagged(block.inline), block.lines) if isinstance(value, Literal) else block
     return Rendered(flow_text(value, preferred, flow=False))
 
 

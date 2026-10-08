@@ -10,6 +10,13 @@ import re
 # A local tag meaning "this scalar is a string, taken literally": never an include.
 LITERAL_TAG = "!literal"
 
+
+class Literal(str):
+    """A string to be written tagged `!literal`: it looks like an include but is meant as a string."""
+
+    __slots__ = ()
+
+
 type Scalar = bool | int | float | str | None
 type Data = Scalar | dict[str, "Data"] | list["Data"]
 
@@ -97,7 +104,7 @@ def key_text(value: Scalar) -> str:
 
 def same(a: Data, b: Data) -> bool:
     """Strict equality: types must match (1, 1.0 and true differ), NaN equals NaN, key order is ignored."""
-    if type(a) is not type(b):
+    if _kind(a) is not _kind(b):
         return False
     if isinstance(a, dict):
         assert isinstance(b, dict)
@@ -108,3 +115,8 @@ def same(a: Data, b: Data) -> bool:
     if isinstance(a, float) and isinstance(b, float) and math.isnan(a) and math.isnan(b):
         return True
     return a == b
+
+
+def _kind(value: Data) -> type:
+    """The type that equality compares: a `Literal` is a string."""
+    return str if isinstance(value, str) else type(value)

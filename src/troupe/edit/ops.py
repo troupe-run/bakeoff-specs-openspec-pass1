@@ -20,7 +20,7 @@ from troupe.edit.blocks import (
     required_chomp,
 )
 from troupe.edit.folded import MoreIndented, refold
-from troupe.edit.scalars import QUOTE_STYLES, double, render_key
+from troupe.edit.scalars import QUOTE_STYLES, double, render_key, tagged
 from troupe.edit.text import (
     Edit,
     Layout,
@@ -36,7 +36,7 @@ from troupe.edit.text import (
 )
 from troupe.errors import WriteRefused
 from troupe.overrides import REF_KEY
-from troupe.schema import Data
+from troupe.schema import Data, Literal
 from troupe.source import SourceFile
 from troupe.tree import Entry, Item, MappingNode, Node, ScalarNode, SequenceNode
 
@@ -78,6 +78,8 @@ def _scalar_style(node: Node | None) -> str | None:
 
 def replace(slot: Slot, value: Data, where: str) -> FileEdits:
     node = slot.node
+    if isinstance(value, Literal) and isinstance(node, ScalarNode) and node.literal_tag is not None:
+        value = str(value)  # the tag is already written, and stays
     if isinstance(node, ScalarNode) and node.literal_tag is not None and not isinstance(value, str):
         slot = _without_literal_tag(slot, node)  # the tag would make the new value a string: it goes too
         node = slot.node
@@ -89,7 +91,10 @@ def replace(slot: Slot, value: Data, where: str) -> FileEdits:
         return src, [inline_edit(src, node.start, node.end, text)]
     layout = detect_layout(src)
     if isinstance(node, ScalarNode) and node.block is not None:
-        return src, _replace_block_scalar(slot, node, node.block, value, layout, where)
+        edits = _replace_block_scalar(slot, node, node.block, value, layout, where)
+        if isinstance(value, Literal):  # the block keeps its header; the tag goes in front of it
+            edits.append(Edit(node.block.start, node.block.start, tagged("")))
+        return src, edits
     if isinstance(node, MappingNode | SequenceNode) and not node.flow_style:
         return src, _replace_block_collection(slot, node, value, layout)
     if isinstance(node, ScalarNode) and node.start == node.end:

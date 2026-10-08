@@ -1,6 +1,6 @@
 """Writing scalars in flow styles (plain, single-quoted, double-quoted) and choosing among them."""
 
-from troupe.schema import Scalar, plain_text, resolve_plain
+from troupe.schema import LITERAL_TAG, Literal, Scalar, plain_text, resolve_plain
 
 QUOTE_STYLES = (None, "'", '"')
 _INDICATORS = "!&*|>'\"%@`#,[]{}"
@@ -98,7 +98,14 @@ def render_scalar(value: Scalar, preferred: str | None, *, flow: bool) -> str:
     """A scalar in the preferred quoting style if it can hold the value, else plain, single, double."""
     if not isinstance(value, str):
         return plain_text(value)
+    if isinstance(value, Literal):
+        return tagged(_render(value, preferred, flow=flow))
     return _render(value, preferred, flow=flow)
+
+
+def tagged(text: str) -> str:
+    """A scalar's text with the `!literal` tag in front, so it reads back as a string, never an include."""
+    return f"{LITERAL_TAG} {text}"
 
 
 def render_key(key: str, preferred: str | None, *, flow: bool) -> str:

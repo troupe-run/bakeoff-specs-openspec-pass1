@@ -110,24 +110,27 @@ def test_ancestor_set_that_leaves_the_include_equal_is_allowed(theatre: Theatre)
     assert t.read("agents/coder.yaml") == "model: m\n"
 
 
-def test_setting_an_include_to_its_own_string_is_a_noop(theatre: Theatre) -> None:
+def test_setting_an_include_to_its_own_string_with_include_is_a_noop(theatre: Theatre) -> None:
     t = _with_coder(theatre)
     snapshot = t.snapshot()
-    assert t.run("set", "agents.coder", "file:agents/coder.yaml").code == 0
+    assert t.run("set", "agents.coder", "file:agents/coder.yaml", "--include").code == 0
     assert t.snapshot() == snapshot
 
 
-def test_new_string_value_starting_file_becomes_an_include(theatre: Theatre) -> None:
+def test_new_string_value_starting_file_with_include_becomes_an_include(theatre: Theatre) -> None:
     theatre.write("troupe.yml", "a: 1\n")
     theatre.write("p.md", "hello\n")
-    assert theatre.run("set", "prompt", "file:p.md").code == 0
+    assert theatre.run("set", "prompt", "file:p.md", "--include").code == 0
     assert theatre.read("troupe.yml") == "a: 1\nprompt: file:p.md\n"
     assert theatre.run("show", "prompt").out == "hello\n"
 
 
-def test_include_value_to_a_missing_file_is_refused(refused: Callable[..., Result]) -> None:
-    r = refused("a: 1\n", "prompt", "file:nope.md")
-    assert r.code == 3 and "prompt" in r.err
+def test_include_value_to_a_missing_file_is_refused(theatre: Theatre) -> None:
+    theatre.write("troupe.yml", "a: 1\n")
+    before = theatre.snapshot()
+    r = theatre.run("set", "prompt", "file:nope.md", "--include")
+    assert (r.code, r.out) == (3, "") and "prompt" in r.err
+    assert theatre.snapshot() == before
 
 
 @pytest.mark.parametrize(

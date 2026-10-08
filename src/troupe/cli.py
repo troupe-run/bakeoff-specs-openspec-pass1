@@ -51,6 +51,11 @@ def _parser() -> argparse.ArgumentParser:
         action="store_true",
         help="replace an alias on the way with a copy of its anchored value, then set the value in the copy",
     )
+    set_.add_argument(
+        "--include",
+        action="store_true",
+        help="write a VALUE string starting file:, https:// or http:// as an include (default: !literal)",
+    )
     history = sub.add_parser("history", parents=[theatre], help="list configuration changes as JSON Lines")
     history.add_argument("path", nargs="?")
     sub.add_parser("watch", parents=[theatre], help="record hand edits to the files as they happen")
@@ -79,6 +84,7 @@ def run(argv: Sequence[str]) -> str:
             args.reason,
             in_include=args.in_include,
             expand_alias=args.expand_alias,
+            include=args.include,
         )
         return ""
     if args.command == "watch":

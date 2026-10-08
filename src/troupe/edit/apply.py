@@ -24,12 +24,14 @@ from troupe.edit.plan import (
 )
 from troupe.edit.text import apply_edits
 from troupe.errors import LoadError, MergeKeyWrite, ThroughAlias, WriteRefused
+from troupe.includes import looks_like_include
 from troupe.leaves import diff_leaves, leaves
 from troupe.loader import Config, load
 from troupe.overrides import is_bare, ref_entry
 from troupe.paths import Path, format_path
 from troupe.remote import refuse_remote
-from troupe.schema import Data, same
+from troupe.schema import Data, Literal, same
+from troupe.schema_file import Position, Schema
 from troupe.store import Change
 from troupe.tree import (
     Entry,
@@ -58,7 +60,9 @@ def compute_set(
     *,
     in_include: bool = False,
     expand_alias: bool = False,
+    include: bool = False,
 ) -> SetResult:
+    value = mark_literals(value, _position(config.root, path), config.schema, include=include, path=path)
     original = {key: src.text for key, src in config.files.items()}
     texts = dict(original)
     current = config
@@ -90,6 +94,52 @@ def compute_set(
             raise WriteRefused(f"{format_path(path)}: not writing, since {e}") from None
     writes = {current.files[k].path: t for k, t in texts.items() if t != original.get(k)}
     return SetResult(writes, diff_leaves(leaves(to_data(config.root)), leaves(to_data(current.root))))
+
+
+def mark_literals(
+    value: Data, position: Position, schema: Schema | None, *, include: bool, path: Path
+) -> Data:
+    """`value` with every include-looking string marked `Literal`, to be written `!literal`, unless the schema
+    marks its position as a URI (a literal there anyway) or `include` (`set --include`) asks for includes.
+
+    With `include`, an include-looking string at a URI position cannot become an include: refused.
+    """
+    if isinstance(value, dict):
+        return {
+            k: mark_literals(v, (*position, k), schema, include=include, path=(*path, k))
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            mark_literals(v, (*position, i), schema, include=include, path=(*path, str(i)))
+            for i, v in enumerate(value)
+        ]
+    if not isinstance(value, str) or not looks_like_include(value):
+        return value
+    uri = schema is not None and schema.is_uri(position)
+    if include and uri:
+        assert schema is not None
+        raise WriteRefused(
+            f"{format_path(path)}: {schema.path} marks this as a URI (format: uri), so {value!r} cannot be "
+            "an include there; leave out --include"
+        )
+    return value if include or uri else Literal(value)
+
+
+def _position(root: Node, path: Path) -> Position:
+    """`path` as a position for the schema: list indexes as ints, read from the tree as far as it exists."""
+    position: list[str | int] = []
+    node: Node | None = root
+    for segment in path:
+        if isinstance(node, SequenceNode) and segment.isdigit():
+            index = int(segment)
+            position.append(index)
+            node = node.items[index].value if index < len(node.items) else None
+        else:
+            position.append(segment)
+            entry = node.get(segment) if isinstance(node, MappingNode) else None
+            node = entry.value if entry is not None else None
+    return position
 
 
 def _reload(theatre: FsPath, texts: dict[FsPath, str], path: Path, config: Config) -> Config:

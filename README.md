@@ -22,7 +22,7 @@ Every command takes `--theatre DIR` (default: the current directory).
 |---|---|
 | `troupe config get PATH` | Print the scalar at `PATH` (a mapping or list exits 5: use `show`) |
 | `troupe config show [PATH] [--sources]` | Print the value at `PATH`, or the whole configuration, as YAML with includes resolved; `--sources` says which file each value comes from |
-| `troupe config set PATH VALUE [--reason TEXT] [--in-include] [--expand-alias]` | Change or create the value at `PATH` and write it back into the file that holds it; `--reason` is recorded in the history; `--in-include` puts new keys into the included (shared) file instead of an override; `--expand-alias` gives a value reached through an [alias](#anchors-and-aliases) its own copy |
+| `troupe config set PATH VALUE [--reason TEXT] [--in-include] [--expand-alias] [--include]` | Change or create the value at `PATH` and write it back into the file that holds it; `--reason` is recorded in the history; `--in-include` puts new keys into the included (shared) file instead of an override; `--expand-alias` gives a value reached through an [alias](#anchors-and-aliases) its own copy; `--include` writes a `file:`/`https://`/`http://` string as an include instead of a [literal](#literal-strings) |
 | `troupe config history [PATH]` | Print the change events with their [lineage](#lineage) as JSON Lines, oldest first, optionally only for `PATH` and below |
 | `troupe config watch` | Record hand edits to the files as they happen, until Ctrl-C (SIGINT) or SIGTERM |
 
@@ -244,6 +244,19 @@ uv run troupe config set docs file:CHANGES.md --theatre /tmp/demo  # docs: !lite
 `set` keeps the tag when it changes the string, and removes it when the new value is not a string (a number, say),
 since it would turn that into a string. `!literal` on a mapping or list fails to load (exit 4).
 
+`set` writes the tag for you. A string in VALUE that would be read as an include is written `!literal`, unless you
+pass `--include` or the [schema](#schema) marks the path `format: uri`:
+
+```sh
+printf 'a: 1\n' > /tmp/demo/.troupe/troupe.yml && printf 'You write code.\n' > /tmp/demo/.troupe/coder.md
+uv run troupe config set docs https://example.com/guide --theatre /tmp/demo   # docs: !literal https://example.com/guide
+uv run troupe config set prompt file:coder.md --include --theatre /tmp/demo   # prompt: file:coder.md
+uv run troupe config get prompt --theatre /tmp/demo                           # You write code.
+```
+
+**Upgrading scripts:** before step 7, `set PATH file:…` created an include. It now writes a literal string. Add
+`--include` to keep the old behaviour.
+
 ### Schema
 
 A theatre can describe its configuration with a [JSON Schema](https://json-schema.org/) (draft 2020-12) in
@@ -368,14 +381,18 @@ on the `.troupe/` directory), so troupe never records its own write-back a secon
 These are recorded with their reasons in `openspec/changes/archive/2026-10-02-config-load-show-set/design.md`,
 `openspec/changes/archive/2026-10-03-config-sync-with-files/design.md`, `openspec/changes/archive/2026-10-03-config-get-and-show/design.md`,
 `openspec/changes/archive/2026-10-04-config-lineage/design.md`, `openspec/changes/archive/2026-10-05-config-include-overrides/design.md`
-`openspec/changes/archive/2026-10-05-config-set-in-include/design.md` and
-`openspec/changes/archive/2026-10-06-config-anchors-and-aliases/design.md`:
+`openspec/changes/archive/2026-10-05-config-set-in-include/design.md`,
+`openspec/changes/archive/2026-10-06-config-anchors-and-aliases/design.md` and
+`openspec/changes/archive/2026-10-08-config-remote-includes-and-schema/design.md`:
 
 1. Setting a key under a null or scalar value (e.g. `agents:` with nothing after it) exits 5. Set the parent to a
    mapping first: `set agents '{coder: {model: x}}'`.
 2. A digit segment that would need a missing parent created exits 5.
 3. An empty or comment-only `troupe.yml` is an empty mapping.
-4. A string VALUE starting with `file:` becomes an include. If the result cannot load, the write is refused (exit 3).
+4. A string in VALUE starting with `file:`, `https://` or `http://` is written tagged `!literal`, so it stays the
+   string you typed, unless the schema marks its path `format: uri` (then it is written untagged, a literal anyway).
+   With `--include` it is written as an include, and if the result cannot load the write is refused (exit 3). This
+   covers strings inside a mapping or list VALUE too: otherwise `set links "[https://…]"` would silently fetch.
 5. Mapping and list VALUEs are applied as a diff: unchanged entries keep their bytes, and keys missing from VALUE are
    deleted. Changing or deleting a YAML include through a parent path is refused (exit 3).
 6. Import happens on any command whose configuration loads, before the command runs. So does reconciling (except for
@@ -475,6 +492,13 @@ These are recorded with their reasons in `openspec/changes/archive/2026-10-02-co
     is judged where its anchor is written.
 57. `set` checks the schema once, on its final result, so a change made in several steps is not refused for a state
     in between.
+58. `--include` on a string at a path the schema marks `format: uri` is refused (exit 3), rather than silently
+    writing a literal you did not ask for.
+59. Setting an include to its own string without `--include` is refused (exit 3): it asks for a literal string in
+    place of the include. With `--include` it changes nothing, as before step 7.
+60. A `!literal` tag is kept when its scalar becomes another string (the smallest diff), and removed when the new value
+    is not a string, which the tag would otherwise turn into one.
+61. `--include` does not affect the text written into a text include's file: that text is never read as an include.
 
 ## Development
 

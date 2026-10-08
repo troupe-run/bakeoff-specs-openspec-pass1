@@ -124,13 +124,16 @@ def set_value(
     *,
     in_include: bool = False,
     expand_alias: bool = False,
+    include: bool = False,
 ) -> None:
     """Write `value` at `path` and record its events as one change by `actor`, through the CLI.
 
     The lock is held until the events are recorded, so no reconcile can see the written files first.
     """
     with theatre_session(theatre, "set") as (config, store):
-        result = compute_set(theatre, config, path, value, in_include=in_include, expand_alias=expand_alias)
+        result = compute_set(
+            theatre, config, path, value, in_include=in_include, expand_alias=expand_alias, include=include
+        )
         for file, text in result.writes.items():
             with file.open("w", encoding="utf-8", newline="") as f:
                 f.write(text)
