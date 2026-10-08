@@ -101,6 +101,9 @@ value starts on the next line, the content lines of a literal block, and lines w
 comment. `<file>` SHALL be the file the scalar is written in (for a value that an include override sets, the file holding
 the override), relative to the theatre directory, with `/` separators
 and no `.` segments. For a text include, `<file>` SHALL be the included file, not the file holding the `file:` string.
+For a value written in remote content (see config-loading, "Remote includes"), `<file>` SHALL be the URL of the
+content it is written in: the include string's URL, or for a `file:` include inside remote content, the URL it
+resolves to.
 When the value at `PATH` is a scalar, `--sources` SHALL print it as a one-scalar YAML document with the comment, not in
 the `get` form. With or without the comments, the output SHALL read back as the same data.
 
@@ -131,3 +134,7 @@ the `get` form. With or without the comments, the output SHALL read back as the 
 #### Scenario: Sources with overrides
 - **WHEN** `troupe.yml` is `coder:\n  $ref: file:agents/coder.yaml\n  temperature: 0.3\n`, `agents/coder.yaml` is `model: m1\ntemperature: 0.2\n`, and `show --sources` is run
 - **THEN** stdout is `coder:\n  model: m1 # from .troupe/agents/coder.yaml\n  temperature: 0.3 # from .troupe/troupe.yml\n`
+
+#### Scenario: Sources from a remote include
+- **WHEN** `<base>` is the URL of a directory served over HTTP, `<base>/coder.yaml` serves `model: m1\nprompt: file:coder.md\n`, `<base>/coder.md` serves `Hi\n`, `troupe.yml` is `coder:\n  $ref: <base>/coder.yaml\n  temperature: 0.3\n`, and `show --sources` is run
+- **THEN** stdout is `coder:\n  model: m1 # from <base>/coder.yaml\n  prompt: | # from <base>/coder.md\n    Hi\n  temperature: 0.3 # from .troupe/troupe.yml\n`
